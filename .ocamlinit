@@ -1,4 +1,6 @@
 #directory "_build/install/default/lib/partition_map/" ;;
 #load_rec "partition_map.cma" ;;
+#directory "_build/install/default/lib/partition_map/lib08/"
+#load_rec "partition_map_lib08.cma" ;;
 
 UTop.set_margin_function (fun _ -> Some 200) ;;

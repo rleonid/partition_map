@@ -1,4 +1,4 @@
-.PHONY: default setup clean build
+.PHONY: default setup clean build 08 all
 
 default: build
 

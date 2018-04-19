@@ -1018,14 +1018,6 @@ end = struct
     | U _        -> 1
     | S {values} -> List.length values
 
-  let assoc_remove_and_get el list =
-    let rec loop acc = function
-      | []                      -> None
-      | (e, v) :: t when e = el -> Some (v, (List.rev acc @ t))
-      | h :: t                  -> loop (h :: acc) t
-    in
-    loop [] list
-
   (* Conversion *)
 
   (* Getters/Setters *)

@@ -105,41 +105,6 @@ module rec Descending : sig
   (* Observe a value for the next element. *)
   val add : 'a -> 'a t -> 'a t
 
-  (* Map the values, the internal storage doesn't change. *)
-  val map : 'a t
-          -> f:('a -> 'b)
-          -> 'b t
-
-
-  (* Fold over the values. *)
-  val fold_values : 'a t
-                  -> f:('b -> 'a -> 'b)
-                  -> init:'b
-                  -> 'b
-
-  (* Fold over the values passing the underlying set to the lambda.
-  val fold_set_and_values : 'a t
-                          -> init:'b
-                          -> f:('b -> Set.t -> 'a -> 'b)
-                          -> 'b
-                          *)
-
-  (** Fold over the indices [0,size) and values. *)
-  val fold_indices_and_values : 'a t
-                              -> f:('b -> int -> 'a -> 'b)
-                              -> init:'b
-                              -> 'b
-
-  (* Iterate over the entries and values. *)
-  val iter_set : 'a t -> f:(int -> 'a -> unit) -> unit
-
-  (* The size of the partition. Specifically, if [size t = n] then [get t i] will
-    succeed for [0, n).  *)
-  val size : 'a t -> int
-
-  (* The number of unique elements in the underlying assoc . *)
-  val length : 'a t -> int
-
 end (* Descending *) and Ascending : sig
 
   type +'a t

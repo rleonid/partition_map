@@ -806,35 +806,6 @@ module rec Descending : sig
   (* Observe a value for the next element. *)
   val add : 'a -> 'a t -> 'a t
 
-  (* Map the values, the internal storage doesn't change. *)
-  val map : 'a t
-          (*-> ('b -> 'b -> bool) *)
-          -> f:('a -> 'b)
-          -> 'b t
-
-
-  (* Fold over the values. *)
-  val fold_values : 'a t
-                  -> f:('b -> 'a -> 'b)
-                  -> init:'b
-                  -> 'b
-
-  (** Fold over the indices [0,size) and values. *)
-  val fold_indices_and_values : 'a t
-                              -> f:('b -> int -> 'a -> 'b)
-                              -> init:'b
-                              -> 'b
-
-  (* Iterate over the entries and values. *)
-  val iter_set : 'a t -> f:(int -> 'a -> unit) -> unit
-
-  (* The size of the partition. Specifically, if [size t = n] then [get t i] will
-    succeed for [0, n).  *)
-  val size : 'a t -> int
-
-  (* The number of unique elements in the underlying assoc . *)
-  val length : 'a t -> int
-
 end (* Descending *) = struct
 
   type +'a t = (Interval.t * 'a) list
@@ -849,34 +820,11 @@ end (* Descending *) = struct
     string_of_list ld ~sep:";" ~f:(fun (i, v) ->
       sprintf "%s:%s" (Interval.to_string i) (to_s v))
 
-  let size = function
-    | []            -> 0
-    | ((i, _) :: _) -> Interval.end_ i + 1
-
-  let length = List.length
-
-  let size_a l = List.fold_left l ~init:0 ~f:(fun a (s, _) -> a + Set.size s)
-
   let add v l = match l with
     | []                       -> [Interval.make 0 0, v]
     | (s, ov) :: t when v = ov -> ((Interval.extend_one s, v) :: t)
     | ((s, _) :: _)            -> let e = 1 + Interval.end_ s in
                                   (Interval.make e e, v) :: l
-
-
-  let fold_values ld ~f ~init =
-    List.fold_left ld ~init ~f:(fun acc (_i, v) -> f acc v)
-
-  let fold_indices_and_values ld ~f ~init =
-    List.fold_left ld ~init ~f:(fun init (l, v) ->
-      Interval.fold l ~init ~f:(fun acc i -> f acc i v))
-
-  let map ld ~f =
-    List.map ld ~f:(fun (k, v) -> (k, f v))
-
-  let iter_set ld ~f =
-    List.iter ld ~f:(fun (s, v) ->
-      Interval.iter s ~f:(fun i -> f i v))
 
 end (* Descending *) and Ascending :
 
@@ -1056,9 +1004,9 @@ end = struct
         sprintf "[%s]:%s" (Set.to_string s) (to_s v))
 
   let to_string t to_s = match t with
-      | E             -> "Empty!"
-      | U {set;value} -> sprintf "%s:%s" (Set.to_string set) (to_s value)
-      | S { values }  -> asc_to_string values to_s
+    | E             -> "Empty!"
+    | U {set;value} -> sprintf "%s:%s" (Set.to_string set) (to_s value)
+    | S { values }  -> asc_to_string values to_s
 
   let size = function
     | E        -> 0

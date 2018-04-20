@@ -1,0 +1,395 @@
+\documentclass{article}
+
+\usepackage{authblk}          % For 2+ authors
+\usepackage{mathtools}        % an improvement that incorporates amsmath.
+\usepackage{comment}
+\usepackage[ruled,noline]{algorithm2e}
+\usepackage{url}              % Used for linkable URLs.
+
+\begin{document}
+\title{Partition Maps}
+\author{Leonid Rozenberg\thanks{leonidr@gmail.com}}
+\maketitle
+
+\begin{abstract}
+  A partition map is a data structure to track functions where we
+  privilege merging,
+  generating new functions,
+  above other operations.
+  I motivate the use of partition maps in lieu of other data structures
+  and describe challenges in implementing the necessary logic.
+\end{abstract}
+
+\section{Introduction.}
+
+A mathematician can think of a partition map a way to represent a function
+($f : D \rightarrow R$), an association, a map.
+A programmer can think of it as a way to track, non-scalar
+state\footnote{I will mix the two nomenclatures and ways of thinking,
+as domain and range are particularly succinct and useful terms.}.
+
+There are many data structures that one can use to represent functions,
+or state,
+such as arrays, association lists, trees, hash tables and variants of these.
+The deciding factor of which implementation to use depends upon the stored
+data and desired access pattern.
+Most data structures privilege value setting and getting;
+accessing and mutating the value associated with any key in the domain.
+A partition map, is a different technique, where we want to prioritize
+\emph{merging} above other access patterns.
+
+As a running motivation example, let $D$ be the positive integers up to $100$,
+and consider the functions
+
+\begin{minipage}{.5\linewidth}
+\begin{displaymath}
+  f_{1} = \left\{
+        \begin{array}{c c}
+          1 & x \in [10,80] \\
+          0 & \text{otherwise,} \\ %x \in [1,9] \cup [91,100] \\
+        \end{array}
+     \right.
+\end{displaymath}
+\end{minipage}%
+\begin{minipage}{.5\linewidth}
+\begin{displaymath}
+  f_{2} = \left\{
+        \begin{array}{c c}
+          1 & x \in [20,90] \\
+          0 & \text{otherwise.} \\ %x \in [1,9] \cup [91,100] \\
+        \end{array}
+     \right.
+\end{displaymath}
+\end{minipage}
+Merging\footnote{For the functional language purists, the \emph{merge} that I
+describe is commonly thought of as a \emph{map2}; a higher order function that
+takes another function $f$ that is applied to each element of two other
+structures,
+where the arguments to $f$,
+are chosen based on the internals of the data structures.
+I eschew that name to emphasize that something different,
+something dependent on the domain elements, 
+will occur when we merge.
+Moreover, \emph{map} will have a slightly different interpretation. }
+takes two functions and computes a new
+one\footnote{We are not concerned with composition $g(x)=f_{2}(f_{1}(x))$.
+The domain and range are different.}
+such as 
+\begin{displaymath}
+  g = f_{1}+f_{2} = \left\{
+        \begin{array}{c c}
+          0 & x \in [1,9] \cup [91,100] \\
+          1 & x \in [10,19] \cup [81,90] \\
+          2 & x \in [20,80]. \\
+        \end{array}
+     \right.
+\end{displaymath}
+\begin{comment}
+\begin{displaymath}
+  g_{2} = f_{1}+f_{2}\bmod 2 = \left\{
+        \begin{array}{c c}
+          0 & x \in [0,9] \cup [20,80] \cup [91,100] \\
+          1 & x \in [10,19] \cup [81,90] \\
+        \end{array}
+     \right.
+\end{displaymath}
+\end{comment}
+At the moment, the range, $R$, is specified by each function.
+It may vary, but for our purposes we want to emphasize that it is smaller
+than the domain.
+
+
+Briefly, as a point of comparison,
+consider the storage and merging costs for various data
+structures that could be used in this case.
+An array, where we use one array position for each element in the domain,
+would require $O(|D|)$ storage and $O(|D|)$ evaluations for merging.
+This is the naive case.
+We can have similar performance using other data-structures
+(lists, trees and hash-tables) following the naive approach,
+one value per domain element,
+but with the extra overhead of pointer management.
+
+A couple of the conditions,
+present in the example,
+should highlight what is inefficeint about the naive solution.
+%These conditions are the ones that partition maps aims to address.
+\begin{enumerate}
+  \item The size of the range ($R$) is much smaller than the domain ($D$).
+    For $f_{1}$ or $f_{2}$ we have 2 elements vs $100$,
+    and for $g$ the case is $3$ vs $100$.
+    The specific relation of the two values is not as important as emphasizing
+    that we want to create bounds proportional to $|R|$ as opposed to $|D|$.
+
+  \item The merging operation is \emph{bounded},
+    it does not grow the size of the range excessively\footnote{These terms are
+    unfortunately left imprecise at the moment as making them precise is part of
+    the ongoing effort.}.
+    An example of a function that grows excessively would be $h(x) = x + f_{1}$.
+    If we know that all \emph{future} merging operations are also bounded,
+    we are even more motivated that this operation be performed in
+    $O(|R|)$.
+
+  \item The domain is fixed. 
+
+\end{enumerate}
+
+Traditionally,
+we think about such problems by allocating space sufficient for our domain
+and then operate on each element therein.
+But if we know that the range is much smaller,
+it will not grow much in size,
+and the domain is known ahead of time,
+can we do better?
+Specifically,
+can we operate over the range elements,
+and add extra bookkeeping operations to track the domain elements,
+that will make the resulting code faster?
+
+For each function that we specify,
+working backwards,
+the values in the range specify a partition of the domain.
+For example,
+for $g$, $S_{0} = [1,9]\cup [91,100], S_{1} = [10,19] \cup [81,90], S_{2} = [20,80]$
+and $S_{0} \cup S_{1} \cup S_{2} = D = [1,100]$.
+I will refer to this as the partition \emph{implied} by a function.
+
+
+It is important to stress that these conditions are unique to the problem that
+I encountered;
+tracking a likelihood function,
+a probability for a large set of genetic variants,
+over multiple computations.
+The genetic variants (the state space, the domain set),
+were similar in many instances and consequently the functions were bounded.
+If these conditions do not exist in a users scenario,
+the solution would not be useful.
+Particularly, in my use case, merging was the computational bottleneck;
+the application had to perform several million recursive calculations of fairly
+simple arithmetic.
+%Furthermore, boundedness was present.
+%One can think of simpler functions (eg. $f_{1}(x) + f_{2}(x) \bmod 2$),
+%that constrained the resulting execution.
+
+\subsection{Related data structures}
+
+Before describing the implementation it would be helpfult to survey the
+literature of related data structures;
+to contrast how they do not meet the requirements and 
+for inspiration.
+The common refrain is that they will make an undesired tradeoff,
+where they favor lookups versus merging.
+
+\subsubsection{Bidirectional maps}
+
+A bidirectional map\footnote{\url{https://en.wikipedia.org/wiki/Bidirectional_map}},
+can be thought of as set whose elements are pairs that represent the association,
+coupled with lookup and alteration methods so that the map is preserved regardless
+of which side is used as a key.
+For our purposes, naively, they would require storing an element of the domain.
+Non-naively, if one side was to represent a set of the implied partition,
+we are still willing to disgard the convenience of lookups for fast merges.
+
+\subsubsection{DIET}
+
+Discrete Interval Encoding Tree \cite{Erwig1993} (DIET),
+efficiently
+represent the first, chronologically
+For example, DIETs\footnote{}
+adapted to maps,
+lead the way to a smarter solution;
+they efficiently represent the sets that partition the function of the domain.
+But, again these data structure also support operations,
+specifically getting and setting,
+that are superfluous to our concerns and raise 
+
+\subsubsection{Mergeable Interval Map}
+
+Promising, but also not optimized for merging.
+
+\subsection{Towards a non-naive implementation.}
+
+Arrays are not amenable to non-naive solutions
+because the association between domain and range is implicit;
+each position in the array is associated with an element from the domain
+based on some, usually obvious, enumeration.
+What is stored in each position is then the appropriate element in the range.
+
+An association list is a linked list where each node contains a key and a value.
+\begin{comment}
+For our purposes, they highlight how to separate two concerns necessary for
+our representation.
+\end{comment}
+They allow us $O(|R|)$ storage since we can store just one value per node.
+Then the problem turns into how to represent the keys,
+the sets of partition of $D$ implied by $f$.
+For the moment,
+let us put that problem aside and assume that we have such a representation
+$S_{i}$.
+For example, for $f_{1}$, $S_{1} = [10,80]$ and $S_{2} = [1,9]\cup[81,100]$.
+There is a simple algorithm to merge two association lists (\ref{Alm1}).
+Start by traversing both lists looking for intersections between the sets.
+If an intersection exists between the keys,
+we merge the two values and then insert that,
+keyed by the intersection,
+into an association list accumulator.
+
+\begin{algorithm}[H]
+  \SetKwProg{Fn}{Function}{\string:}{}
+  \newcommand{\forcond}{$i=0$ \KwTo $n$}
+  \SetKwFunction{Merge}{Merge1}%
+  \SetKwFunction{Insert}{InsertIntoList}%
+  \DontPrintSemicolon
+  \Fn(){\Merge{$L_{1}, L_{2}, f$}}{
+    \KwData{Two association lists, $L_{1}, L_{2}$, and the merge function, $f$.}
+    \KwResult{$L$ merged association list.}
+    $L \leftarrow [] $\;
+    \ForEach{$S_{1},v_{1} \in L_{1}$}{
+      $R \leftarrow S_{1}$\;
+      \ForEach{$S_{2},v_{2} \in L2$ \textup{and} $R \neq \emptyset$}{
+        $I \leftarrow R \cap S_{2}$\;
+        $R \leftarrow R \backslash S_{2}$\;
+        \If{$I \neq \emptyset$}{
+          \Insert{$I,v,L$}\;
+        }
+      }
+    }
+    \Return{$L$}
+  }
+  \Fn(){\Insert{$I, v, L$}}{
+    \KwData{A set $I$, the key of value $v$ and $L$, a list to insert into.}
+    \KwResult{Modifies $L$, the lead pointer does not change.}
+    \ForEach{$S_{i},v_{i} \in L$}{
+      \If{$v_{i} = v$}{
+        $S_{i} \leftarrow S_{i} \cup I$\;
+        \Return
+      }
+    }
+    Append $(I,v)$ to end of $L$.\;
+  }
+\caption{Merging two Association Lists.\label{Alm1}}
+\end{algorithm}
+
+The rub is in how we insert the new keyed value into the accumulator.
+One sensible strategy would be to prepend (cons) each set value pair to the
+front of the accumulator after we find an intersection.
+While this is the fastest approach it does not bind the growth of the
+association list.
+In order to enforce that the association list contains only unique values
+we have to traverse the entire accumulator.
+If $L_{1}$ and $L_{2}$ have $m, n$ elements respectively,
+and assuming that in the function there are no duplicate values,
+this leads to a pretty dissappointing $O(n^{2}m^{2})$ running time.
+
+From a running time performance we cannot do better than $O(|R|^{2})$.
+
+
+Intuitively, I know that the solution would require 
+
+\begin{comment}
+%\begin{table}
+\begin{center}
+\begin{tabular}{|l|r|r|}
+  \hline
+  Data Structure    & Storage  & Merge Cost \\
+  \hline
+  \hline
+  Array                           & $O(|D|)$ & $O(|D|)$    \\
+  \hline
+  Naive association list          & $O(|D|)$ & $O(|D|)$    \\
+  Value indexed association list  & $(|R|)$  & $O(  $\\
+  \hline
+\end{tabular}
+\end{center}
+%\end{table}
+
+\end{comment}
+
+
+
+
+
+This is still very much a work in progress,
+and I'm not certain that the current method and implementation is the best one.
+A big motivation for publishing and exposing this work is to gather feedback.
+
+\subsection{Domain ``clusterness''}
+
+\section{Details}
+
+\subsection{Intervals}
+
+The domain is limited, much smaller than the set of representable integers.
+Creating a pair requires extra allocations, or a pointer to the data.
+Packing the start and end values into a single value is possible.
+Plus it allows faster comparisons.
+
+\section{Open questions}
+
+\subsection{Is there a fully implicit form of partition maps?}
+
+The methods describe here use nested lists to represent the final association,
+and the implementation is in OCaml,
+a functional garbage-collected language.
+The cost of managing the pointers for our data-structure is handled by the GC,
+and perhaps a hand-tuned solution might do better.
+But such a hand-tuned solution would rely upon carefully managing space for
+the sets of the partition and values (or pointers to them).
+This leads to an important question of whether the entire arrangement may be
+encoded in an implicit form.
+
+In our custom implementation of intervals, we encoded the start and end
+within a single integer because the size of the domain was much smaller
+than what is ultimately representable by even half a 32bit word.
+But this leaves open the question of whether we can encode even more state
+into a given uniform bitvector,
+such that our entire data structure is arranged implicitly,
+like a binary heap.
+
+\subsubsection{SIMD.}
+
+If a good implicit representation is possible where essentially arrays of
+integers are used to represent the sets of a partition and pointers to values.
+The operations that merge more than one partition map could be bottlenecked
+at comparing integers,
+and SIMD operations could be helpful.
+
+\subsection{Do we have to traverse the whole accumulator?}
+
+What techniques can we leverage to make adding to the accumulator
+faster than traversing the entire list.
+At the moment we are only asking for an equality test.
+But if we were to ask for a comparator could we use that to arrange the values,
+and the sets that they point at,
+to preserve fast merging yet provide faster ways to detect duplicate elements
+of the range and then preserve boundedness.
+
+\subsection{Hashing sets within a partition?}
+
+Does there exist a way to efficiently hash a set within a partition?
+The current work uses an association list to store data, but being able to
+hash a set would open up the possibility of using hash table like data
+structures instead.
+
+Bells equation.
+
+There are two difficulties with computing this hash.
+The first is that it has to be faster than the intersection-difference
+operation described previously.
+And second, it needs to be updatable
+
+\section{Acknowledgments}
+
+This research was initiated and performed while the author was employed by
+Mount Sinai and supported by the Parker Institute for Cancer Immunotherapy.
+The author is indebted to helpful discussions with Sebastian Mondet.
+
+\clearpage
+
+\bibliographystyle{plain}
+\bibliography{note}
+
+\end{document}
+
+
+

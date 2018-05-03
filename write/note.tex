@@ -6,6 +6,9 @@
 \usepackage[ruled,noline]{algorithm2e}
 \usepackage{url}              % Used for linkable URLs.
 
+% Empty Square Brackets are used to mean empty intervals.
+\newcommand{\esb}{[\,]}
+
 \begin{document}
 \title{Partition Maps}
 \author{Leonid Rozenberg\thanks{leonidr@gmail.com}}
@@ -61,20 +64,9 @@ and consider the functions
      \right.
 \end{displaymath}
 \end{minipage}
-Merging\footnote{For the functional language purists, the \emph{merge} that I
-describe is commonly thought of as a \emph{map2}; a higher order function that
-takes another function $f$ that is applied to each element of two other
-structures,
-where the arguments to $f$,
-are chosen based on the internals of the data structures.
-I eschew that name to emphasize that something different,
-something dependent on the domain elements, 
-will occur when we merge.
-Moreover, \emph{map} will have a slightly different interpretation. }
-takes two functions and computes a new
-one\footnote{We are not concerned with composition $g(x)=f_{2}(f_{1}(x))$.
-The domain and range are different.}
-such as 
+Merging takes two functions and computes a new
+one
+such as
 \begin{displaymath}
   g = f_{1}+f_{2} = \left\{
         \begin{array}{c c}
@@ -84,24 +76,16 @@ such as
         \end{array}
      \right.
 \end{displaymath}
-\begin{comment}
-\begin{displaymath}
-  g_{2} = f_{1}+f_{2}\bmod 2 = \left\{
-        \begin{array}{c c}
-          0 & x \in [0,9] \cup [20,80] \cup [91,100] \\
-          1 & x \in [10,19] \cup [81,90] \\
-        \end{array}
-     \right.
-\end{displaymath}
-\end{comment}
-At the moment, the range, $R$, is specified by each function.
+
+The range, $R$, is specified by each function.
 It may vary, but for our purposes we want to emphasize that it is smaller
 than the domain.
-
+Lastly, we are not concerned with composition,
+cases such as $g(x)=f_{j}(f_{i}(x))$.
 
 Briefly, as a point of comparison,
 consider the storage and merging costs for various data
-structures that could be used in this case.
+structures that could be used to model $f_{1}, f_{2}$ and then create $g$.
 An array, where we use one array position for each element in the domain,
 would require $O(|D|)$ storage and $O(|D|)$ evaluations for merging.
 This is the naive case.
@@ -112,7 +96,7 @@ but with the extra overhead of pointer management.
 
 A couple of the conditions,
 present in the example,
-should highlight what is inefficeint about the naive solution.
+should highlight what is inefficient about the naive solution.
 %These conditions are the ones that partition maps aims to address.
 \begin{enumerate}
   \item The size of the range ($R$) is much smaller than the domain ($D$).
@@ -130,7 +114,12 @@ should highlight what is inefficeint about the naive solution.
     we are even more motivated that this operation be performed in
     $O(|R|)$.
 
-  \item The domain is fixed. 
+  \item The domain is fixed.
+    We know the full state for which we want to keep track of values and it
+    does not change.
+    Many algorithms that we might consider assume, \emph{a priori} that the
+    user does not know the full domain,
+    consequently concerning themselves with how it might grow or shrink.
 
 \end{enumerate}
 
@@ -171,16 +160,38 @@ simple arithmetic.
 %One can think of simpler functions (eg. $f_{1}(x) + f_{2}(x) \bmod 2$),
 %that constrained the resulting execution.
 
-\subsection{Related data structures}
+Finally, for the functional language enthusiast, the \emph{merge} that I
+describe is commonly thought of as a \emph{map2}; a higher order function that
+takes another function $m$ that is applied to each element of two other
+structures,
+where the arguments to $m$,
+are chosen based on the internals of the data structures.
+I eschew that name to emphasize that something different,
+something dependent on the domain elements,
+will occur when we merge.
+Moreover, \emph{map} will have a slightly different interpretation.
+When we \emph{map},
+we consider all of the unique elements of the range and
+apply a function to each of these values,
+with two caveats: the transform does not take a domain element as an
+argument and we store only the unique elements of the resulting range.
+Similarly, when we merge we will again ignore the domain elements when computing
+the new value,
+keep track of only the unique resulting values,
+but also take elements from the two ranges such that their respective domain sets
+have an intersection.
 
-Before describing the implementation it would be helpfult to survey the
+
+\section{Related approaches.}
+
+Before describing the implementation it would be helpful to survey the
 literature of related data structures;
-to contrast how they do not meet the requirements and 
+to contrast how they do not meet the requirements and
 for inspiration.
-The common refrain is that they will make an undesired tradeoff,
+The common refrain is that they will make an undesired trade-off,
 where they favor lookups versus merging.
 
-\subsubsection{Bidirectional maps}
+\subsection{Bidirectional maps}
 
 A bidirectional map\footnote{\url{https://en.wikipedia.org/wiki/Bidirectional_map}},
 can be thought of as set whose elements are pairs that represent the association,
@@ -188,32 +199,76 @@ coupled with lookup and alteration methods so that the map is preserved regardle
 of which side is used as a key.
 For our purposes, naively, they would require storing an element of the domain.
 Non-naively, if one side was to represent a set of the implied partition,
-we are still willing to disgard the convenience of lookups for fast merges.
+we are still willing to discard the convenience of lookups for fast merges.
 
-\subsubsection{DIET}
+\subsection{Fast Mergeable Integer Maps}
 
-Discrete Interval Encoding Tree \cite{Erwig1993} (DIET),
-efficiently
-represent the first, chronologically
-For example, DIETs\footnote{}
-adapted to maps,
-lead the way to a smarter solution;
-they efficiently represent the sets that partition the function of the domain.
-But, again these data structure also support operations,
-specifically getting and setting,
-that are superfluous to our concerns and raise 
+Okasaki's classic description\cite{Okasaki1998} of Patricia trees highlight how
+we can maximize the information contained within keys to build efficient data
+structures.
+Unfortunately, for our purposes, this technique has a slightly different
+interpretation of \emph{merging},
+combining disparate sets of keys and values that preserve fast lookup.
+We intent to merge two cases where values for all the keys are already known.
 
-\subsubsection{Mergeable Interval Map}
+One could imagine mapping every set within a partition to a unique, large,
+integer by representing each it as a bit-vector (a bit per element), and then
+utilizing Patricia tree's as described in this work.
+The large key sizes ($O(|D|)$ bits),
+pose a substantial problem as the bit-twiddling necessary for lookups is
+limited to the programs word size which might be a relatively small portion
+of $|D|$.
+Furthermore, the original fast lookup guarantees provided by the integers are
+now swamped by this bigger size.
+Lastly, this method, like the others described, does not utilize our previous
+knowledge of a fixed domain.
 
-Promising, but also not optimized for merging.
+One potential way to rescue this work would be an effective,
+potentially probabilistic,
+hash of sets in a partition to integers.
+But this is certainly an open question.
 
-\subsection{Towards a non-naive implementation.}
+\subsection{DIET}
 
-Arrays are not amenable to non-naive solutions
+Discrete Interval Encoding Trees\cite{Erwig1993},
+describe an efficient representation for sets of types that easily transformed
+into integers.
+The use of intervals to represent sets is an affirmation of my approach.
+Unfortunately, it is far from straightforward to figure out how to adapt these
+sets to represent maps.
+Moreover, maps present a further challenge as they will break the adjacency of
+near by intervals.
+Finally,
+while traversing the leaf nodes of a tree is not difficult,
+constructing trees in that order can lead to pathological cases.
+At the end of the day,
+I am not certain that trees provide the right storage organization for our use
+case.
+
+\subsection{Mergeable Interval Map}
+
+The Mergeable Interval Map\cite{Bonichon2010} cleverly extends Okasaki's
+technique to ranges of integers, ala DIETs.
+This work is probably closest in spirit to the
+data structure that I intent to describe but the focus on retrieval,
+even if optimized for arbitrary intervals,
+is not the trade-off that I seek.
+
+\section{Towards a non-naive implementation.}
+
+A non-naive solution requires smaller overhead than one value per domain element.
+Arrays are not amenable to such approaches
 because the association between domain and range is implicit;
 each position in the array is associated with an element from the domain
 based on some, usually obvious, enumeration.
 What is stored in each position is then the appropriate element in the range.
+
+\begin{comment}
+We could store only the range elements in an array,
+but that would just transfer the difficulty of the problem into
+figuring out how to index into such an array.
+
+\end{comment}
 
 An association list is a linked list where each node contains a key and a value.
 \begin{comment}
@@ -222,7 +277,7 @@ our representation.
 \end{comment}
 They allow us $O(|R|)$ storage since we can store just one value per node.
 Then the problem turns into how to represent the keys,
-the sets of partition of $D$ implied by $f$.
+the sets of a partition of $D$ implied by $f$.
 For the moment,
 let us put that problem aside and assume that we have such a representation
 $S_{i}$.
@@ -243,13 +298,14 @@ into an association list accumulator.
   \Fn(){\Merge{$L_{1}, L_{2}, f$}}{
     \KwData{Two association lists, $L_{1}, L_{2}$, and the merge function, $f$.}
     \KwResult{$L$ merged association list.}
-    $L \leftarrow [] $\;
+    % Unlike square brackets this looks fine without an extra space.
+    $L \leftarrow \{\} $\;
     \ForEach{$S_{1},v_{1} \in L_{1}$}{
       $R \leftarrow S_{1}$\;
       \ForEach{$S_{2},v_{2} \in L2$ \textup{and} $R \neq \emptyset$}{
-        $I \leftarrow R \cap S_{2}$\;
-        $R \leftarrow R \backslash S_{2}$\;
-        \If{$I \neq \emptyset$}{
+        \lnlset{inter}{inter}$I \leftarrow R \cap S_{2}$\;
+        \lnlset{diff}{diff}$R \leftarrow R \backslash S_{2}$\;
+        \uIf{$I \neq \emptyset$}{
           \Insert{$I,v,L$}\;
         }
       }
@@ -260,8 +316,8 @@ into an association list accumulator.
     \KwData{A set $I$, the key of value $v$ and $L$, a list to insert into.}
     \KwResult{Modifies $L$, the lead pointer does not change.}
     \ForEach{$S_{i},v_{i} \in L$}{
-      \If{$v_{i} = v$}{
-        $S_{i} \leftarrow S_{i} \cup I$\;
+      \uIf{$v_{i} = v$}{
+        $S_{i} \leftarrow S_{i} \cup I$\tcp*[r]{Modify the set}
         \Return
       }
     }
@@ -271,67 +327,296 @@ into an association list accumulator.
 \end{algorithm}
 
 The rub is in how we insert the new keyed value into the accumulator.
-One sensible strategy would be to prepend (cons) each set value pair to the
+One sensible strategy would be to prepend (cons) each set-value pair to the
 front of the accumulator after we find an intersection.
 While this is the fastest approach it does not bind the growth of the
 association list.
 In order to enforce that the association list contains only unique values
 we have to traverse the entire accumulator.
 If $L_{1}$ and $L_{2}$ have $m, n$ elements respectively,
-and assuming that in the function there are no duplicate values,
-this leads to a pretty dissappointing $O(n^{2}m^{2})$ running time.
+and consider the worst case that the function creates no duplicate values,
+this leads to a pretty disappointing $O(n^{2}m^{2})$ running time.
+This running time also excludes the set intersection and difference
+operations (labeled lines \ref{inter} and \ref{diff} in the algorithm),
+as if they were not expensive.
 
-From a running time performance we cannot do better than $O(|R|^{2})$.
+Unfortunately, they are expensive.
+One initially suitable approach to representing the $S_{i}$ would be
+to use a bit-vector.
+This is a common, well understood, data-structure,
+especially as the algorithms to compute set intersection and difference require
+simple bitwise logic operators.
+The problem is that this bitvector would require $|D|$ elements,
+and $O(|D|)$ bitwise logic operators!
 
+The solution that I propose is to use pairs to represent the sequential,
+inclusive intervals that cover each $S_{i}$ stored in \emph{ascending} order.
+For example\footnote{I am using square brackets ([]) to denote
+intervals (and pairs) and curly brackets (\{\}) to denonte lists.
+This is counter to many common functional programming languages,
+but it reinforces the mathematical notation.
+Using parentheses for intervals would be confusing as I explicitly want to
+use inclusive intervals.},
+for $f_{1}$, $S_{0} = \{[1,9],[81,100]\}$ and $S_{1} = \{[10,80]\}$
+and for $g$, $S_{0} = \{[1,9], [91,100]\}$,
+$S_{1} = \{ [10,19], [81,90]\}$,
+and $S_{2} = \{[20,80] \}$
+This approaches main advantage is that it allows us to escape from $O(|D|)$
+as each $S_{i}$ is bounded by $|R|$.
 
-Intuitively, I know that the solution would require 
+\begin{algorithm}[H]
+  \DontPrintSemicolon
+  \SetKwProg{Fn}{Function}{\string:}{}
+  \newcommand{\forcond}{$i=0$ \KwTo $n$}
+  \SetKwFunction{Iiad}{IntervalIntersectionDifference}
+  \Fn(){\Iiad{$I_{1}, I_{2}$}}{
+    \KwData{Two intervals $I_{1} = [s_{1},e_{1}]$ and $I_{2}=[s_{2},e_{2}]$
+      of non-negative integers that are non-empty,
+      $s_{1} \leq e_{1}$ and
+      $s_{2} \leq e_{2}$.}
+    \KwResult{A quintuple of optional\footnote{In the sense that the interval may be empty: $\esb$.}
+      intervals: the intersection,
+      the part of $I_{1}$ that come before the intersection,
+      the part of $I_{2}$ that come before the intersection,
+      the part of $I_{1}$ that come after the intersection,
+      and the part of $I_{2}$ that come after the intersection.
+      }
+      \uIf{$s_{2} < s_{1}$}{
+        \uIf{$e_{2} < s_{1}$}{
+          \Return $\esb,\esb,I_{2},I_{1},\esb$
+        }\uElseIf{$e_{2} < e_{1}$}{
+          \Return $[s_{1}, e_{2}],\esb,[s_{2},s_{1} - 1], [e_{2} + 1, e_{1}], \esb$
+        }\uElseIf{$e_{2} = e_{1}$}{
+          \Return $I_{1},\esb, [s_{2}, s_{1} - 1], \esb,\esb$
+        }\uElse(\tcp*[h]{$e_{2} > e_{1}$}){
+          \Return $I_{1}, \esb, [s_{2}, s_{1} - 1],\esb, [e_{1} + 1, e_{2}]$
+        }
+      }
+      \uElseIf(\,\tcp*[h]{$e_{2} \geq s_{1}$}){$s_{2} = s_{1}$}{
+        \uIf{$e_{2} < e_{1}$}{
+          \Return $[s_{1}, e_{2}], \esb,\esb, [e_{2} + 1, e_{1}],\esb$
+        }\uElseIf{$e_{2} = e_{1}$}{
+          \Return $ I_{1},\esb,\esb,\esb,\esb$
+        }\uElse(\tcp*[h]{$e_{2} > e_{1}$}){
+          \Return $I_{1},\esb,\esb,\esb,[e_{1} + 1, e_{2}]$
+        }
+      }
+      \uElseIf(\,\tcp*[h]{$e_{2} > s_{1}$}){$s_{1} < s_{2}$ \textup{and} $s_{2} < e_{1}$}{
+        \uIf{$e_{2} < e_{1}$}{
+          \Return $I_{2},[s_{1}, s_{2}-1],\esb,[e_{2}+1, e_{1}],\esb$
+        }\uElseIf{$e_{2} = e_{1}$}{
+          \Return $I_{2}, [s_{1}, s_{2}-1],\esb,\esb,\esb$
+        }\uElse($ e_{2} > e_{1} $){
+          \Return $[s_{2}, e_{1}], [s_{1}, s_{2}-1],\esb,\esb, [e_{1} + 1, e_{2}]$
+        }
+      }
+      \uElseIf(\,\tcp*[h]{$ e_{2} \geq e_{1}$}){$e_{1} = s_{2}$}{
+        \uIf{$e_{2} = e_{1}$}{
+          \Return $I_{2}, [s_{1}, s_{2} - 1], \esb,\esb,\esb$
+        } \uElse(\tcp*[h]{$e_{2} > e_{1}$}){
+          \Return $[s_{2}, e_{1}], [s_{1}, s_{2} - 1], \esb,\esb,[e_{1} + 1, e_{2}]$
+        }
+      }
+      \uElse(\tcp*[h]{$e_{1} < s_{2}$}){
+        \Return $\esb,I_{1},\esb,\esb,I_{2}$
+      }
 
-\begin{comment}
-%\begin{table}
-\begin{center}
-\begin{tabular}{|l|r|r|}
-  \hline
-  Data Structure    & Storage  & Merge Cost \\
-  \hline
-  \hline
-  Array                           & $O(|D|)$ & $O(|D|)$    \\
-  \hline
-  Naive association list          & $O(|D|)$ & $O(|D|)$    \\
-  Value indexed association list  & $(|R|)$  & $O(  $\\
-  \hline
-\end{tabular}
-\end{center}
-%\end{table}
+  }
+\caption{Interval Intersection and Difference.\label{Alm2}}
+\end{algorithm}
 
-\end{comment}
+% Reconsider this page break if we can have a nicer position for the algorithm
+\pagebreak
 
+Using intervals has two further advantages over bit-vectors.
+First, computing the intersection and difference requires a straight-forward
+but large case analysis of the ways that two intervals can
+intersect (Algorithm \ref{Alm2}).
+These operations require just simple integer comparison,
+and because our key elements are discrete we know our borders exactly.
 
+The interval intersection-difference operation is then coupled with a fold
+over the two lists that contain the entire set.
 
+\begin{algorithm}[H]
+  \SetKwProg{Fn}{Function}{\string:}{}
+  \newcommand{\forcond}{$i=0$ \KwTo $n$}
+  \SetKwFunction{Iad}{IntersectionAndDifference}%
+  \SetKwFunction{Iiad}{IntervalIntersectionDifference}%
+  \DontPrintSemicolon
+  \Fn(){\Iad{$S_{1}, S_{2}$}}{
+    \KwData{Two lists of \emph{ascending} intervals $S_{1}, S_{2}$.}
+    \KwResult{A list of intersecting interval $S_{i}$, and two lists of the
+      set differences for each input lists, $S_{d1}, S_{d2}$.}
+    $S_{i} \leftarrow \{ \} $\;
+    $S_{d1} \leftarrow \{ \} $\;
+    $S_{d2} \leftarrow \{ \} $\;
+    \While{$S_{1} \neq \{ \}$ \textup{and} $S_{2} \neq \{ \} $}{
+      $I_{1} \leftarrow $ pop first element of $S_{1}$\;
+      $I_{2} \leftarrow $ pop first element of $S_{2}$\;
+      $I, B_{1}, B_{2}, A_{1}, A_{2} \leftarrow$ \Iiad{$I_{1}, I_{2}$}\;
+      \lIf{$I \neq \esb$}{ Append $I$ to end of $S_{i}$}
+      \lIf{$B_{1} \neq \esb$}{ Append $B_{1}$ to end of $S_{d1}$}
+      \lIf{$B_{2} \neq \esb$}{ Append $B_{2}$ to end of $S_{d2}$}
+      \lIf{$A_{1} \neq \esb$}{ Prepend $A_{1}$ to front of $S_{1}$}
+      \lIf{$A_{2} \neq \esb$}{ Prepend $A_{2}$ to front of $S_{2}$}
+    }
+    \lIf{$S_{1} \neq \{ \}$}{Append $S_{1}$ to end of $S_{d1}$}
+    \lIf{$S_{2} \neq \{ \}$}{Append $S_{2}$ to end of $S_{d2}$}
+    \Return $S_{i}, S_{d1}, S_{d2}$
+  }
+\caption{Set Intersection and Difference.\label{Alm3}}
+\end{algorithm}
 
+Unfortunately,
+there is no clear way to think about the running time of Algorithm \ref{Alm3}.
+On the one hand,
+we can think about about the running time in terms of the lengths of the
+interval lists.
+In this case,
+it easy to construct pathological cases that have running time
+$O(|S_{1}||S_{2}|)$
+such as
+$S_{1} = \{[1,1],[3,3],\ldots\}$ and $S_{2}=\{[2,2],[4,4],\ldots\}$.
+On the other hand,
+one can think about the size of $D$ that is represented by each $S_{i}$,
+in this case,
+the performance of the algorithm would depend upon the implied partitions.
+In other words, it would be highly domain dependent.
 
-This is still very much a work in progress,
-and I'm not certain that the current method and implementation is the best one.
-A big motivation for publishing and exposing this work is to gather feedback.
+In practice this algorithm is sufficient and has an advantage
+over using bit-vectors.
+Since the intervals are ascending,
+every call to
+\emph{IntervalIntersectionDifference}
+the size of $S_{1}$ and $S_{2}$ (which could represent $|D|$),
+shrinks by either $I,B_{1},$ or $B_{2}$.
+Which, if one considers the first three return
+values in Algorithm \ref{Alm2},
+always contains one non empty interval.
 
-\subsection{Domain ``clusterness''}
+With this representation of sets it is easier to build a more efficient
+algorithm to merge two association lists.
+In this case we will,
+once again,
+add the constraints that the sets are ascending.
+Since our set representation consists of a list of intervals,
+by ascending,
+we mean that the lowest element, of the lowest interval,
+of each set
+are ascending.
+
+\begin{algorithm}[H]
+  \SetKwProg{Fn}{Function}{\string:}{}
+  \newcommand{\forcond}{$i=0$ \KwTo $n$}
+  \SetKwFunction{Merge}{Merge2}%
+  \SetKwFunction{Insert}{InsertIntoList}%
+  \SetKwFunction{Iad}{IntersectionAndDifference}%
+  \DontPrintSemicolon
+  \Fn(){\Merge{$L_{1}, L_{2}, f$}}{
+    \KwData{Two association lists, $L_{1}, L_{2}$, and the merge function, $f$.
+      The association lists consist of lists of intervals,
+      sets ($S_{i}$),
+      as the keys and arbitrary values.}
+    \KwResult{$L$ merged association list.}
+    % Unlike square brackets this looks fine without an extra space.
+    $L \leftarrow \{\} $\;
+
+    \While{$L_{1} \neq \{ \}$ \textup{and} $L_{2} \neq \{ \} $}{
+      $S_{1}, v_{1} \leftarrow $ pop first element of $L_{1}$\;
+      $S_{2}, v_{2} \leftarrow $ pop first element of $L_{2}$\;
+      $S_{i}, S_{d1}, S_{d2} \leftarrow$ \Iad{$S_{1}, S_{2}$}\;
+      $v_{n} \leftarrow f(v_{1}, v_{2})$\;
+      \Insert{$S_{i}, v_{n}, L$}\;
+      \lIf{$S_{d1} \neq \{\}$}{ Prepend $S_{d1},v_{1}$ to front of $L_{1}$}
+      \lIf{$S_{d2} \neq \{\}$}{ Prepend $S_{d2},v_{2}$ to front of $L_{2}$}
+    }
+    \Return{$L$}
+  }
+
+\caption{Merging two Association Lists.\label{Alm4}}
+\end{algorithm}
+
+In this version, \emph{InsertIntoList} must maintain the property that the
+sets store their intervals in ascending order.
+This requires walking two ascending lists,
+talking the lower element and merging if the intervals are adjacent
+(eg. $s_{i} = e_{j}$).
+
+The ascending property of the sets guarantees that the call to
+\emph{IntersectionAndDifference} always returns a non-empty intersection,
+while at most one of $S_{d1}$ or $S_{d2}$ will be empty.
+Consequently there are at most $mn$ calls to $f$.
+Unfortunately,
+also in the pathological case where each call to $f$ generates a unique value,
+we will continue to walk an increasingly longer list with every call to
+\emph{InsertIntoList},
+recreating the $O(m^{2}n^{2})$ running time of Algorithm \ref{Alm1}.
+
+Are the faster set intersection and difference calculations,
+which should not be understated,
+the only benefit?
+Consider the running time of the ideal case,
+where we merge two lists with identical partitioning.
+It is easy to see that in this case,
+Algorithm \ref{Alm1},
+still checks for intersections $m^{2}$ times,
+while Algorithm \ref{Alm4} only $m$ times.
+
+This example also highlights,
+how with this approach,
+as opposed to the first approach with bit-vectors.
+how we order the domain matters in terms of computational speed.
+It is important to avoid potentially pathological cases that might
+partition the domain into the even and odds example.
+We want our domain to have clusters of value,
+so that they represent big intervals.
 
 \section{Details}
 
-\subsection{Intervals}
+\subsection{Interval representation}
 
-The domain is limited, much smaller than the set of representable integers.
+Given that the domain is limited.
+It is probable that for reasonable problems,
+it is much smaller than the set of representable integers ($2^{32}$ or $2^64$).
+Furthermore,
+one of the big practical burdens of this algorithm is the storage of the intervals
+as pairs.
 Creating a pair requires extra allocations, or a pointer to the data.
-Packing the start and end values into a single value is possible.
-Plus it allows faster comparisons.
 
-\section{Open questions}
+One implementation shortcut that I use is to pack the interval into one integer,
+where the start value occupies the upper half of the bits,
+and the end occupies the lower.
+In the 64-bit case, store $I = [s,e]$ as  $s \cdot 2^{32}+e$.
+Aside from less allocations,
+this also makes comparing intervals much faster
+and a better version of Algorithm \ref{Alm2} can be implemented that
+takes only one comparison to see if two intervals are equal.
+
+\section{Conclusion and Open questions}
+
+This is still very much a work in progress,
+and I am not certain that the current method and implementation is the best one.
+A big motivation for publishing and exposing this work is to gather feedback.
+I have tried my best to find connections to other approaches,
+and perhaps this technique is well understood and studied under a different name,
+but I have been largely unsuccessful.
+I have also not been successful in providing proofs of various claims,
+nor even improve their somewhat unsatisfactory worst case
+performance\footnote{$O(m^{2}n^{2})$ can easily be worse than $O(|D|)$ especially because
+of modern hardware configurations.}.
+
+None-the-less, I have found this technique useful and wanted to reach out to
+broader community.
+I will close by describing what I see to be the interesting problems remaining.
 
 \subsection{Is there a fully implicit form of partition maps?}
 
 The methods describe here use nested lists to represent the final association,
-and the implementation is in OCaml,
+and the implementation is in OCaml\cite{ocaml-manual},
 a functional garbage-collected language.
-The cost of managing the pointers for our data-structure is handled by the GC,
+The cost of managing the pointers for our data-structure is handled by the
+garbage-collector\footnote{In my use case the program spends around 25\% of the running time in the GC.},
 and perhaps a hand-tuned solution might do better.
 But such a hand-tuned solution would rely upon carefully managing space for
 the sets of the partition and values (or pointers to them).
@@ -342,7 +627,7 @@ In our custom implementation of intervals, we encoded the start and end
 within a single integer because the size of the domain was much smaller
 than what is ultimately representable by even half a 32bit word.
 But this leaves open the question of whether we can encode even more state
-into a given uniform bitvector,
+into a given uniform bit-vector,
 such that our entire data structure is arranged implicitly,
 like a binary heap.
 
@@ -352,7 +637,10 @@ If a good implicit representation is possible where essentially arrays of
 integers are used to represent the sets of a partition and pointers to values.
 The operations that merge more than one partition map could be bottlenecked
 at comparing integers,
-and SIMD operations could be helpful.
+in this case SIMD operations could be helpful.
+
+This would be particularly useful to functions that merge more than 2
+partition maps.
 
 \subsection{Do we have to traverse the whole accumulator?}
 
@@ -368,15 +656,19 @@ of the range and then preserve boundedness.
 
 Does there exist a way to efficiently hash a set within a partition?
 The current work uses an association list to store data, but being able to
-hash a set would open up the possibility of using hash table like data
-structures instead.
-
-Bells equation.
-
-There are two difficulties with computing this hash.
-The first is that it has to be faster than the intersection-difference
-operation described previously.
-And second, it needs to be updatable
+hash a set would open up the possibility of using hash table like
+or Patricia tree like data structures (as previously
+described\cite{Okasaki1998}).
+For most purposes,
+we can expect that $|R|<2^{64}$,
+so a 64-bit word size would be sufficient.
+But we want two properties for this function.
+First, efficient computation, we do not have the resources for a cryptographic
+secure hash.
+And second,
+some ability to preserve intersections and set-difference operations.
+This last request, seems particularly daunting,
+so perhaps this approach is dubious.
 
 \section{Acknowledgments}
 
@@ -390,6 +682,3 @@ The author is indebted to helpful discussions with Sebastian Mondet.
 \bibliography{note}
 
 \end{document}
-
-
-

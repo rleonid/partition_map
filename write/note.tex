@@ -25,7 +25,7 @@
 
 \section{Introduction.}
 
-A mathematician can think of a partition map a way to represent a function
+A mathematician can think of a partition map as a way to represent a function
 ($f : D \rightarrow R$), an association, a map.
 A programmer can think of it as a way to track, non-scalar
 state\footnote{I will mix the two nomenclatures and ways of thinking,
@@ -41,12 +41,13 @@ accessing and mutating the value associated with any key in the domain.
 A partition map, is a different technique, where we want to prioritize
 \emph{merging} above other access patterns.
 
-As a running motivation example, let $D$ be the positive integers up to $100$,
+As a running motivating example,
+let $D$ be the positive integers up to $100$,
 and consider the functions
 
 \begin{minipage}{.5\linewidth}
 \begin{displaymath}
-  f_{1} = \left\{
+  f_{1}(x) = \left\{
         \begin{array}{c c}
           1 & x \in [10,80] \\
           0 & \text{otherwise,} \\ %x \in [1,9] \cup [91,100] \\
@@ -56,7 +57,7 @@ and consider the functions
 \end{minipage}%
 \begin{minipage}{.5\linewidth}
 \begin{displaymath}
-  f_{2} = \left\{
+  f_{2}(x) = \left\{
         \begin{array}{c c}
           1 & x \in [20,90] \\
           0 & \text{otherwise.} \\ %x \in [1,9] \cup [91,100] \\
@@ -68,7 +69,7 @@ Merging takes two functions and computes a new
 one
 such as
 \begin{displaymath}
-  g = f_{1}+f_{2} = \left\{
+  g(x) = f_{1}(x)+f_{2}(x) = \left\{
         \begin{array}{c c}
           0 & x \in [1,9] \cup [91,100] \\
           1 & x \in [10,19] \cup [81,90] \\
@@ -105,14 +106,21 @@ should highlight what is inefficient about the naive solution.
     The specific relation of the two values is not as important as emphasizing
     that we want to create bounds proportional to $|R|$ as opposed to $|D|$.
 
-  \item The merging operation is \emph{bounded},
-    it does not grow the size of the range excessively\footnote{These terms are
-    unfortunately left imprecise at the moment as making them precise is part of
-    the ongoing effort.}.
+  \item Traditionally,
+    when programmes are concerned with excessive or redundant evaluations,
+    they will use memoization.
+    In this case it is dubious that it will improve the situation as
+    performing the calculation
+    is so simple that it might be cheaper than looking up the result.
+    Thus, the merging operation is \emph{simple}\footnote{
+      These terms are unfortunately left imprecise at the moment as making
+      them precise is part of the ongoing effort.}.
+
+  \item The merging operation is \emph{bounded}\footnote{Ibid.},
+    it does not grow the size of the range excessively.
     An example of a function that grows excessively would be $h(x) = x + f_{1}$.
     If we know that all \emph{future} merging operations are also bounded,
-    we are even more motivated that this operation be performed in
-    $O(|R|)$.
+    we are even more motivated to merge in $O(|R|)$ time.
 
   \item The domain is fixed.
     We know the full state for which we want to keep track of values and it
@@ -123,7 +131,7 @@ should highlight what is inefficient about the naive solution.
 
 \end{enumerate}
 
-Traditionally,
+Usually,
 we think about such problems by allocating space sufficient for our domain
 and then operate on each element therein.
 But if we know that the range is much smaller,
@@ -143,22 +151,69 @@ for $g$, $S_{0} = [1,9]\cup [91,100], S_{1} = [10,19] \cup [81,90], S_{2} = [20,
 and $S_{0} \cup S_{1} \cup S_{2} = D = [1,100]$.
 I will refer to this as the partition \emph{implied} by a function.
 
-
 It is important to stress that these conditions are unique to the problem that
-I encountered;
-tracking a likelihood function,
+I encountered and may not be present in your scenario.
+My objective was to compute a likelihood function,
 a probability for a large set of genetic variants,
-over multiple computations.
-The genetic variants (the state space, the domain set),
-were similar in many instances and consequently the functions were bounded.
+over multiple recursions.
+
+\begin{align}
+  M_{lkn} &= e_{M_{lkn}}(t_{MM}M_{l-1,k,n} + t_{IM}I_{l-1,k,n} + t_{DM}D_{l-1,k,n})
+  \nonumber \\
+  I_{lkn} &= \frac{1}{4}(t_{MI}M_{l-1,k,n} + t_{II}I_{l-1,k,n}) \nonumber \\
+  D_{lkn} &= t_{MD}M_{l,k,n} + t_{DD}D_{l,k,n} \nonumber
+\end{align}
+
+The genetic variants (the state/domain space indexed by $n$),
+were similar in many instances and consequently the functions were
+bounded\footnote{The numerical accuracy was also fixed.}.
+The calculations were also simple,
+a cross product of probabilities ($M, I, D$) and weights ($t_{MM}, t_{IM}, t_{DM} \ldots$).
+Unfortunately,
+the application had to perform this calculation several million times,
+the recurrences were part of a dynamic programming table.
+This was a big computational bottleneck.
 If these conditions do not exist in a users scenario,
-the solution would not be useful.
-Particularly, in my use case, merging was the computational bottleneck;
-the application had to perform several million recursive calculations of fairly
-simple arithmetic.
-%Furthermore, boundedness was present.
-%One can think of simpler functions (eg. $f_{1}(x) + f_{2}(x) \bmod 2$),
-%that constrained the resulting execution.
+the solution will not be useful.
+
+As another example consider merging several columns of discrete values,
+in a table,
+such as a credit calculation.
+There are several columns all indexed by the same element, UserId.
+\begin{center}
+\begin{tabular}{|r|l|l|l|l|}
+\hline
+  UserId & Education   & Income Bracket & Age Group & Credit \\
+\hline
+  1      & High School & $<10k$       & $< 20$  & Bad    \\
+  2      & High School & $<10k$       & $< 20$  & Bad    \\
+  \ldots & \ldots      & \dots        & \ldots  & \ldots \\
+  103    & High School & $<10k$       & 20-30   & Bad    \\
+  104    & High School & $<10k$       & 20-30   & Bad    \\
+  \ldots & \ldots      & \dots        & \ldots  & \ldots \\
+  206    & High School & $10k-50k$    & 20-30   & Bad    \\
+  %\ldots & \ldots      & \dots        & \ldots  & \ldots \\
+  %706    & Bachelors   & $<10k$       & 20-30   & Bad    \\
+  \ldots & \ldots      & \dots        & \ldots  & \ldots \\
+  1506   & Bachelors   & $50k-100k$   & 20-30   & Ok     \\
+  \ldots & \ldots      & \dots        & \ldots  & \ldots \\
+  %6506   & Bachelors   & $>100k$      & 30-40   & Ok \\
+  %\ldots & \ldots      & \dots        & \ldots  & \ldots \\
+  11986  & Bachelors   & $>200k$      & 30-40   & Good \\
+  \ldots & \ldots      & \dots        & \ldots  & \ldots \\
+  252321 & Doctorate   & $50k-100k$   & 20-30   & Ok \\
+  \ldots & \ldots      & \dots        & \ldots  & \ldots \\
+  \hline
+\end{tabular}
+\end{center}
+In this example, all of the inputs to our merge function
+(eg. Education can be one of ``High School'', ``Bachelors''
+or ``Doctorate'').
+and the output (Credit can be either Good, Medium or Bad)
+are discretized.
+If the individual datums are stored independently (ie. we have not
+already allocated the full table to store the data and result) a
+partition map approach might be warrented.
 
 Finally, for the functional language enthusiast, the \emph{merge} that I
 describe is commonly thought of as a \emph{map2}; a higher order function that
@@ -571,6 +626,9 @@ It is important to avoid potentially pathological cases that might
 partition the domain into the even and odds example.
 We want our domain to have clusters of value,
 so that they represent big intervals.
+If we revisit the merging columns example,
+we want to know that successive rows will have the same values for
+multiple attributes.
 
 \section{Details}
 
@@ -609,14 +667,17 @@ of modern hardware configurations.}.
 None-the-less, I have found this technique useful and wanted to reach out to
 broader community.
 I will close by describing what I see to be the interesting problems remaining.
+I have divided the problems into a practical and theoretical categories.
 
-\subsection{Is there a fully implicit form of partition maps?}
+\subsection{Practical}
+\subsubsection{Is there a fully implicit form of partition maps?}
 
 The methods describe here use nested lists to represent the final association,
 and the implementation is in OCaml\cite{ocaml-manual},
 a functional garbage-collected language.
 The cost of managing the pointers for our data-structure is handled by the
-garbage-collector\footnote{In my use case the program spends around 25\% of the running time in the GC.},
+garbage-collector\footnote{
+  In my use case the program spends around 25\% of the running time in the GC.},
 and perhaps a hand-tuned solution might do better.
 But such a hand-tuned solution would rely upon carefully managing space for
 the sets of the partition and values (or pointers to them).
@@ -631,7 +692,7 @@ into a given uniform bit-vector,
 such that our entire data structure is arranged implicitly,
 like a binary heap.
 
-\subsubsection{SIMD.}
+\subsubsection{SIMD}
 
 If a good implicit representation is possible where essentially arrays of
 integers are used to represent the sets of a partition and pointers to values.
@@ -642,7 +703,20 @@ in this case SIMD operations could be helpful.
 This would be particularly useful to functions that merge more than 2
 partition maps.
 
-\subsection{Do we have to traverse the whole accumulator?}
+\subsection{Theoretical}
+
+\subsubsection{Define simple and bounded}
+
+The current work leaves these terms,
+used to describe when one might use partition maps,
+loosely defined,
+and gives examples as opposed to practical guidance.
+Consequently,
+the cost of evaluating the merge operation $f$ does not permeate
+the run time analysis,
+of the total partition map merge.
+
+\subsubsection{Do we have to traverse the whole accumulator?}
 
 What techniques can we leverage to make adding to the accumulator
 faster than traversing the entire list.
@@ -652,7 +726,7 @@ and the sets that they point at,
 to preserve fast merging yet provide faster ways to detect duplicate elements
 of the range and then preserve boundedness.
 
-\subsection{Hashing sets within a partition?}
+\subsubsection{Hashing sets within a partition?}
 
 Does there exist a way to efficiently hash a set within a partition?
 The current work uses an association list to store data, but being able to

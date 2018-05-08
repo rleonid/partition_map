@@ -834,6 +834,10 @@ sig
 
   val of_descending : ('a -> 'a -> bool) -> 'a Descending.t -> 'a t
 
+  val of_ascending_interval_list : ('a -> 'a -> bool)
+                  -> ((int * int) * 'a) list
+                  -> 'a t
+
   (* empty should only be used as a place holder (ex. initializing an array)
   * and not for computation. TODO: refactor this. *)
   val empty : 'a t
@@ -970,6 +974,38 @@ end = struct
                        invalid_argf "Single set but not universal? %s"
                           (Set.to_string set)
     | values      -> S {size = size_a values; values }
+
+  let of_ascending_interval_list eq l = match l with
+    | []          ->
+      invalid_arg "of_ascending_interval_list: Empty argument."
+    | [(s,e), v]  ->
+        if s <> 0 then
+          invalid_argf "Doesn't start with zero but: %d" s
+        else
+          U { size  = e - s + 1
+            ; set   = Set.of_interval (Interval.make ~start:s ~end_:e)
+            ; value = v
+            }
+    | ((s,e), _) :: t  ->
+        if s <> 0 then
+          invalid_argf "Doesn't start with zero but: %d" s
+        else
+          let size_of_first = e - s + 1 in
+          let size, _last_e =
+            List.fold_left t ~init:(size_of_first, e)
+              ~f:(fun (ss, pe) ((s, e), _) ->
+                    if s <> pe + 1 then
+                      invalid_argf "Gap larger than between last end %d and next start %d"
+                        pe s
+                    else
+                      let ns = ss + e - s + 1 in
+                      ns, e)
+        in
+        let as_intervals =
+            List.map l ~f:(fun ((start, end_), v) ->
+              Interval.make ~start ~end_, v)
+        in
+        S { size; values = ascending_t eq as_intervals }
 
   let descending = function
     | E              -> invalid_arg "Can't convert empty to descending"

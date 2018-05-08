@@ -111,6 +111,12 @@ end (* Descending *) and Ascending : sig
 
   val of_descending : ('a -> 'a -> bool) -> 'a Descending.t -> 'a t
 
+  (* Throw Invalid_argument if does not start with 0 or the intervals
+     are not ascending. *)
+  val of_ascending_interval_list : ('a -> 'a -> bool)
+                                 -> ((int * int) * 'a) list
+                                 -> 'a t
+
   (* empty_a should only be used as a place holder (ex. initializing an array)
   * and not for computation. TODO: refactor this. *)
   val empty : 'a t

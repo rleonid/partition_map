@@ -1,8 +1,16 @@
 (** A utility module where we utilize the bits of an integer.
- *
- * This is the just the common code that is used in Bitvector and
- * Partiotion_Map.Interval.
- *)
+
+This is the just the common code that is used in Bitvector and
+Partiotion_Map.Interval.
+
+This code is derived from OCaml-Containers project, which is licensed using
+BSD-2-Clause. I added code to track the size of the array and then modified
+this code further for my purposes.
+
+Copyright (c) 2013, Simon Cruanes
+All rights reserved.
+
+*)
 
 let width = Sys.word_size - 1
 

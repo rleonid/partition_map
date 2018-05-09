@@ -846,6 +846,11 @@ sig
 
   val to_string : 'a t -> ('a -> string) -> string
 
+  val equal : ('a -> 'a -> bool)
+            -> 'a t
+            -> 'a t
+            -> bool
+
   (* [get t i] returns the value associated  with the [i]'th element.
 
     @raise {Not_found} if [i] is outside the range [0, (size t)). *)
@@ -1043,6 +1048,21 @@ end = struct
     | E             -> "Empty!"
     | U {set;value} -> sprintf "%s:%s" (Set.to_string set) (to_s value)
     | S { values }  -> asc_to_string values to_s
+
+  let equal e t1 t2 = match t1, t2 with
+    | E, E                                  ->
+        true
+    | U { size = s1; set = t1; value = v1 }
+    , U { size = s2; set = t2; value = v2 } ->
+        s1 = s2 && t1 = t2 && e v1 v2
+    | S { size = s1; values = v1 }
+    , S { size = s2; values = v2 }          ->
+        s1 = s2 &&
+          List.fold_left2 v1 v2 ~init:true
+            ~f:(fun eq (s1, v1) (s2, v2) ->
+                  eq && s1 = s2 && e v1 v2)
+    | _, _                                  ->
+        false
 
   let size = function
     | E        -> 0

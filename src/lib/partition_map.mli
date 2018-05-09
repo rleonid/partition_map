@@ -125,6 +125,11 @@ end (* Descending *) and Ascending : sig
 
   val to_string : 'a t -> ('a -> string) -> string
 
+  val equal : ('a -> 'a -> bool)
+            -> 'a t
+            -> 'a t
+            -> bool
+
   (* [get t i] returns the value associated  with the [i]'th element.
 
     @raise {Not_found} if [i] is outside the range [0, (size t)). *)

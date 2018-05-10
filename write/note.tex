@@ -23,12 +23,12 @@
   and describe challenges in implementing the necessary logic.
 \end{abstract}
 
-\section{Introduction.}
+\section{Introduction}
 
 A mathematician can think of a partition map as a way to represent a function
 ($f : D \rightarrow R$), an association, a map.
 A programmer can think of it as a way to track, non-scalar
-state\footnote{I will mix the two nomenclatures and ways of thinking,
+state\footnote{I will mix the two nomenclatures and ways of thinking
 as domain and range are particularly succinct and useful terms.}.
 
 There are many data structures that one can use to represent functions,
@@ -151,35 +151,71 @@ for $g$, $S_{0} = [1,9]\cup [91,100], S_{1} = [10,19] \cup [81,90], S_{2} = [20,
 and $S_{0} \cup S_{1} \cup S_{2} = D = [1,100]$.
 I will refer to this as the partition \emph{implied} by a function.
 
+For the functional language enthusiast, the \emph{merge} that I
+describe is commonly thought of as a \emph{map2}; a higher order function that
+takes another function $m$ that is applied to each element of two other
+structures,
+where the arguments to $m$,
+are chosen based on the internals of the data structures.
+I eschew that name to emphasize that something different,
+something dependent on the domain elements,
+will occur when we merge.
+Moreover, \emph{map} will have a slightly different interpretation.
+When we \emph{map},
+we consider all of the unique elements of the range and
+apply a function to each of these values,
+with two caveats: the transform does not take a domain element as an
+argument and we store only the unique elements of the resulting range.
+Similarly, when we merge we will again ignore the domain elements when computing
+the new value,
+keep track of only the unique resulting values,
+but also take elements from the two ranges such that their respective domain sets
+have an intersection.
+
+\section{Example applications}
+
 It is important to stress that these conditions are unique to the problem that
-I encountered and may not be present in your scenario.
-My objective was to compute a likelihood function,
-a probability for a large set of genetic variants,
-over multiple recursions.
+I encountered and may not be present in other scenarios.
+To give more motivation for this method it might be worthwhile to consider
+potential applications.
 
-\begin{align}
-  M_{lkn} &= e_{M_{lkn}}(t_{MM}M_{l-1,k,n} + t_{IM}I_{l-1,k,n} + t_{DM}D_{l-1,k,n})
-  \nonumber \\
-  I_{lkn} &= \frac{1}{4}(t_{MI}M_{l-1,k,n} + t_{II}I_{l-1,k,n}) \nonumber \\
-  D_{lkn} &= t_{MD}M_{l,k,n} + t_{DD}D_{l,k,n} \nonumber
-\end{align}
+\subsection{Histograms}
 
-The genetic variants (the state/domain space indexed by $n$),
-were similar in many instances and the functions were
-bounded by their numerical accuracy.
-The calculations were also simple,
-a cross product of probabilities ($M, I, D$) and weights ($t_{MM}, t_{IM}, t_{DM} \ldots$).
-Unfortunately,
-the application had to perform this calculation several million times,
-the recurrences were part of a dynamic programming table.
-This was a big computational bottleneck.
-If these conditions do not exist in a users scenario,
-the solution will not be useful.
+The functions that I used as my motivating examples might seem like toy
+examples without actual use.
+In practice,
+functions that are only a little bit more complicated,
+can arise when a user wants to track an empirical distribution with a histogram.
+Or even simpler uses such as frequency tables.
+One of the most common first steps in the construction of such tables is to
+decide the number of classes or bins;
+how to partition the domain.
+What if that was a question that was largely determined empirically?
 
-As another example consider merging several columns of discrete values,
+This approach could have positive benefits in systems that want to integrate
+statistics from different observations, via such histograms.
+Distributed systems come to mind.
+For example, different routers might keep a map of packet size to latency
+(or other metric).
+But the domain space,
+packet size,
+could have a clustering effect
+where packets that have nearly the same size
+(ex 100 or 105 bytes),
+have the same outcome.
+Or a large threshold effect,
+if a packet is larger than 1kb then it's metric is twice the value of
+those below.
+In both cases,
+a partition map would provide a sparser representation,
+and potentially simpler merging logic for aggregating algorithms.
+
+\subsection{Columnar Store}
+
+As another example consider merging columns of discrete values,
 in a table,
 such as a credit calculation.
-There are several columns all indexed by the same element, UserId.
+There are several columns all indexed by the same primary key UserId.
 \begin{center}
 \begin{tabular}{|r|l|l|l|l|}
 \hline
@@ -210,34 +246,41 @@ In this example, all of the inputs to our merge function
 (eg. Education can be one of ``High School'', ``Bachelors''
 or ``Doctorate'').
 and the output (Credit can be either Good, Medium or Bad)
-are discretized.
-If the individual datums are stored independently (ie. we have not
+are discrete.
+If the individual datums are stored independently (eg. we have not
 already allocated the full table to store the data and result) a
-partition map approach might be warrented.
+partition map approach might be warranted.
 
-Finally, for the functional language enthusiast, the \emph{merge} that I
-describe is commonly thought of as a \emph{map2}; a higher order function that
-takes another function $m$ that is applied to each element of two other
-structures,
-where the arguments to $m$,
-are chosen based on the internals of the data structures.
-I eschew that name to emphasize that something different,
-something dependent on the domain elements,
-will occur when we merge.
-Moreover, \emph{map} will have a slightly different interpretation.
-When we \emph{map},
-we consider all of the unique elements of the range and
-apply a function to each of these values,
-with two caveats: the transform does not take a domain element as an
-argument and we store only the unique elements of the resulting range.
-Similarly, when we merge we will again ignore the domain elements when computing
-the new value,
-keep track of only the unique resulting values,
-but also take elements from the two ranges such that their respective domain sets
-have an intersection.
+\subsection{Original motivation}
+
+My objective,
+when developing partition maps,
+was to compute a likelihood function,
+a probability for a large set of genetic variants.
+The likelihood function was computed via a sequence of multiple recursions,
+in a dynamic programming approach.
+
+\begin{align}
+  M_{lkn} &= e_{lkn}(t_{MM}M_{l-1,k,n} + t_{IM}I_{l-1,k,n} + t_{DM}D_{l-1,k,n})
+  \nonumber \\
+  I_{lkn} &= \frac{1}{4}(t_{MI}M_{l-1,k,n} + t_{II}I_{l-1,k,n}) \nonumber \\
+  D_{lkn} &= t_{MD}M_{l,k,n} + t_{DD}D_{l,k,n} \nonumber
+\end{align}
+
+The genetic variants (the state/domain space indexed by $n$),
+were similar in many instances and the functions were
+bounded by their numerical accuracy.
+The calculations were also simple,
+a cross product of probabilities ($M, I, D$) and weights ($t_{MM}, t_{IM}, t_{DM} \ldots$).
+Unfortunately,
+the application had to perform this calculation several million times
+per sample.
+This was a big computational bottleneck
+and performing this computation via partition maps
+reduced the running time to less than 5\% of the naive approach.
 
 
-\section{Related approaches.}
+\section{Related approaches}
 
 Before describing the implementation it would be helpful to survey the
 literature of related data structures;
@@ -279,7 +322,7 @@ Lastly, this method, like the others described, does not utilize our previous
 knowledge of a fixed domain.
 
 One potential way to rescue this work would be an effective,
-potentially probabilistic,
+possibly probabilistic,
 hash of sets in a partition to integers.
 But this is certainly an open question.
 
@@ -309,7 +352,7 @@ data structure that I intent to describe but the focus on retrieval,
 even if optimized for arbitrary intervals,
 is not the trade-off that I seek.
 
-\section{Towards a non-naive implementation.}
+\section{Towards a non-naive implementation}
 
 A non-naive solution requires smaller overhead than one value per domain element.
 Arrays are not amenable to such approaches
@@ -365,6 +408,7 @@ into an association list accumulator.
         }
       }
     }
+    Sort $L$ by keys, the sets
     \Return{$L$}
   }
   \Fn(){\Insert{$I, v, L$}}{
@@ -378,7 +422,7 @@ into an association list accumulator.
     }
     Append $(I,v)$ to end of $L$.\;
   }
-\caption{Merging two Association Lists.\label{Alm1}}
+\caption{Merging Two Association Lists.\label{Alm1}}
 \end{algorithm}
 
 The rub is in how we insert the new keyed value into the accumulator.
@@ -565,8 +609,9 @@ are ascending.
   \SetKwProg{Fn}{Function}{\string:}{}
   \newcommand{\forcond}{$i=0$ \KwTo $n$}
   \SetKwFunction{Merge}{Merge2}%
-  \SetKwFunction{Insert}{InsertIntoList}%
+  \SetKwFunction{Moate}{MergeOrAddToEnd}%
   \SetKwFunction{Iad}{IntersectionAndDifference}%
+  \SetKwFunction{Insert}{InsertIntoAscending}%
   \DontPrintSemicolon
   \Fn(){\Merge{$L_{1}, L_{2}, f$}}{
     \KwData{Two association lists, $L_{1}, L_{2}$, and the merge function, $f$.
@@ -582,30 +627,58 @@ are ascending.
       $S_{2}, v_{2} \leftarrow $ pop first element of $L_{2}$\;
       $S_{i}, S_{d1}, S_{d2} \leftarrow$ \Iad{$S_{1}, S_{2}$}\;
       $v_{n} \leftarrow f(v_{1}, v_{2})$\;
-      \Insert{$S_{i}, v_{n}, L$}\;
-      \lIf{$S_{d1} \neq \{\}$}{ Prepend $S_{d1},v_{1}$ to front of $L_{1}$}
-      \lIf{$S_{d2} \neq \{\}$}{ Prepend $S_{d2},v_{2}$ to front of $L_{2}$}
+      \Moate{$S_{i}, v_{n}, L$}\;
+      \lIf{$S_{d1} \neq \{\}$}{ \Insert{$S_{d1},v_{1}$,$L_{1}$}}
+      \lIf{$S_{d2} \neq \{\}$}{ \Insert{$S_{d2},v_{2}$,$L_{2}$}}
     }
     \Return{$L$}
   }
+  \Fn(){\Moate{$S,v,L$}}{
+    \KwData{A set $S$, value $v$ and an association list $L$.}
+    \KwResult{Modifies $L$, the lead pointer is unchanged.}
+    \ForEach{$S_{i},v_{i} \in L$}{
+      \uIf{$v_{i} = v$}{
+        Traverse the interval lists $S_{i}$ and $S$, ordering and merging intervals.\;
+        \Return
+      }
+    }
+    Append $(I,v)$ to end of $L$.\;
+  }
+  \Fn(){\Insert{$S,v,L$}}{
+    \KwData{A set $S$, value $v$ and an association list $L$. We assume that $v$ does not equal any value in $L$.}
+    \KwResult{Modifies $L$, the lead pointer is unchanged.}
+    \ForEach{$S_{i},v_{i} \in L$}{
+      \uIf{$S < S_{i}$}{
+        Insert $(S,v)$ before $(S_{i},v_{i})$\;
+      }
+    }
+    Append $(I,v)$ to end of $L$.\;
+  }
 
-\caption{Merging two Association Lists.\label{Alm4}}
+\caption{Merging Two Association Lists.\label{Alm4}}
 \end{algorithm}
 
-In this version, \emph{InsertIntoList} must maintain the property that the
+In this version, \emph{MergeOrAddToEnd} must maintain the property that the
 sets store their intervals in ascending order.
-This requires walking two ascending lists,
+This requires walking two ascending lists of intervals,
 talking the lower element and merging if the intervals are adjacent
 (eg. $s_{i} = e_{j}$).
+Similarly, \emph{InsertIntoAscending} is important to make sure that each
+call to \emph{IntersectionAndDifference} is aligned;
+the start of the lowest intervals in $S_{1}$ and $S_{2}$ are equal.
+This is the invariant that allows us to avoid nested loops over the two lists
+and process them in tandem instead.
 
 The ascending property of the sets guarantees that the call to
-\emph{IntersectionAndDifference} always returns a non-empty intersection,
-while at most one of $S_{d1}$ or $S_{d2}$ will be empty.
-Consequently there are at most $mn$ calls to $f$.
+\emph{IntersectionAndDifference} always returns a non-empty intersection.
 Unfortunately,
-also in the pathological case where each call to $f$ generates a unique value,
+in the pathological cases we can construct partitions so that
+neither $S_{d1}$ nor $S_{d2}$ are empty,
+consequently there are at most $mn$ calls to $f$.
+Furthermore,
+in the pathological case where each call to $f$ generates a unique value,
 we will continue to walk an increasingly longer list with every call to
-\emph{InsertIntoList},
+\emph{MergeOrAddToEnd},
 recreating the $O(m^{2}n^{2})$ running time of Algorithm \ref{Alm1}.
 
 Are the faster set intersection and difference calculations,
@@ -620,7 +693,7 @@ while Algorithm \ref{Alm4} only $m$ times.
 
 This example also highlights,
 how with this approach,
-as opposed to the first approach with bit-vectors.
+as opposed to the first approach with bit-vectors,
 how we order the domain matters in terms of computational speed.
 It is important to avoid potentially pathological cases that might
 partition the domain, such as the even and odds example.

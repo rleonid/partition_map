@@ -703,7 +703,11 @@ If we revisit the merging columns example,
 we want to know that successive rows will have the same values for
 multiple attributes.
 
-\section{Details}
+\section{Implementation and Details}
+
+A standalone library implementing partition maps in OCaml\cite{ocaml-manual}
+is available at \url{https://github.com/rleonid/partition_map}.
+As part of that
 
 \subsection{Interval representation}
 
@@ -746,7 +750,7 @@ I have divided the problems into a practical and theoretical categories.
 \subsubsection{Is there a fully implicit form of partition maps?}
 
 The methods describe here use nested lists to represent the final association,
-and the implementation is in OCaml\cite{ocaml-manual},
+and the implementation is in OCaml,
 a functional garbage-collected language.
 The cost of managing the pointers for our data-structure is handled by the
 garbage-collector\footnote{

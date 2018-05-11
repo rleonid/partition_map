@@ -7,14 +7,13 @@
 
 open Printf
 open StdLabels
-open Test
-
+open Profiling_lib.Test
 
 let () =
   if not !Sys.interactive then begin
-    let which = [(*`NaiveList;*) `NaiveArray; `Pmas]  in
+    let which = [(*`NaiveList;*) `NaiveArray; `Pma]  in
     let pars  =
-      Test.generate_parameters
+      generate_parameters
         (*~average_number_of_intervals_incr:2.0 *)
         ~domain_sizes:[100; 500; 1000; 5000]
         ~number_of_states:[100; 500; 1000; 5000;]

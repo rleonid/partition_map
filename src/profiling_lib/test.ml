@@ -254,6 +254,18 @@ module Benchmarks (C : Calculation) = struct
       `Bv (Array.fold_left bv_states ~init ~f:(fun s1 s2 ->
             Bv_assocs.map2 s1 s2 ~f:C.op))
 
+  (* Using old partition maps. *)
+  module PmaIp = Lib09.Partition_map.Ascending
+  let states_as_pmas_ip states =
+    Array.map states ~f:(PmaIp.of_ascending_interval_list C.equal)
+
+  let time_pmas_ip_merge p pm_states =
+    let size = p.domain_size in
+    let starting_ascending_pm = PmaIp.init ~size C.zero in
+    fun () ->
+      `PmaIp (Array.fold_left pm_states ~init:starting_ascending_pm
+          ~f:(fun a p -> PmaIp.merge C.equal a p C.op))
+
   (* Using partition maps. Pma = Ascending Partition Maps, the default kind.*)
   module Pma = Partition_map.Ascending
 
@@ -267,42 +279,23 @@ module Benchmarks (C : Calculation) = struct
       `Pma (Array.fold_left pm_states ~init:starting_ascending_pm
           ~f:(fun a p -> Pma.merge C.equal a p C.op))
 
-  let equal_results r1 r2 = match r1, r2 with
-    | `Init,    `Array _  -> true
-    | `Init,    `Pma _    -> true
-    | `Init,    `Bv _     -> true
-    | `Array _, `Init     -> true
-    | `Pma _,   `Init     -> true
-    | `Bv _,    `Init     -> true
-    | `Init,    `Init     -> false
-    | `Array a, `Pma p    ->
-        Pma.fold_indices_and_values p ~init:true
-          ~f:(fun e i v -> e && C.equal a.(i) v)
-    | `Array a, `Array b  ->
-        Array.fold_left a ~init:(0, true) ~f:(fun (i, e) v ->
-          (i + 1, e && C.equal v b.(i)))
-        |> snd
-    | `Array a, `Bv b  ->
-        Bv_assocs.fold_values b ~init:true ~f:(fun eq i v ->
-          eq && C.equal v a.(i))
-    | `Pma p,   `Array a  ->
-        Pma.fold_indices_and_values p ~init:true
-          ~f:(fun e i v -> e && C.equal a.(i) v)
-    | `Pma a,   `Pma b    ->
-        Pma.equal C.equal a b
-    | `Pma a,   `Bv b     ->
-        Bv_assocs.fold_values b ~init:true ~f:(fun eq i v ->
-          eq && C.equal v (Pma.get a i))
-    | `Bv b1,   `Bv b2    ->
-        let c1 = List.sort compare (Bv_assocs.to_list b1) in
-        let c2 = List.sort compare (Bv_assocs.to_list b2) in
-        c1 = c2   (* Good old polymorphic compare ... *)
-    | `Bv b,    `Array a   ->
-        Bv_assocs.fold_values b ~init:true ~f:(fun eq i v ->
-          eq && C.equal v a.(i))
-    | `Bv b,    `Pma a   ->
-        Bv_assocs.fold_values b ~init:true ~f:(fun eq i v ->
-          eq && C.equal v (Pma.get a i))
+  (* Reduction to array to check that we're computing the same thing. *)
+  let as_array pr = function
+    | `Array a  -> a
+    | `Bv b     ->
+        let a = Array.make pr.domain_size C.zero in
+        Bv_assocs.iter_values b ~f:(fun i v -> a.(i) <- v);
+        a
+    | `Pma p    ->
+        let a = Array.make pr.domain_size C.zero in
+        Pma.fold_indices_and_values p ~init:()
+          ~f:(fun () i v -> a.(i) <- v);
+        a
+    | `PmaIp p ->
+        let a = Array.make pr.domain_size C.zero in
+        PmaIp.fold_indices_and_values p ~init:()
+          ~f:(fun () i v -> a.(i) <- v);
+        a
 
   let generate_tests which p =
     let states = states p in
@@ -318,23 +311,33 @@ module Benchmarks (C : Calculation) = struct
             let arrays = states_as_arrays p states in
             name "Naive two array"
             , time_array_merge p arrays
-        | `BvAssocs   ->
+        | `BvAssoc    ->
             let bvas   = states_as_bv_assocs p states in
             name "Bitvector backed assocs"
             , time_bv_assoc_merge bvas
-        | `Pmas       ->
+        | `PmaIp      ->
+            let pmas   = states_as_pmas_ip states in
+            name "Paired Interval partition maps"
+            , time_pmas_ip_merge p pmas
+        | `Pma        ->
             let pmas   = states_as_pmas states in
             name "Ascending partition maps"
             , time_pmas_merge p pmas)
     in
-    let _ignore_last_result =
-      List.fold_left tests ~init:`Init
-        ~f:(fun pr (name, t) ->
-              let r = t () in
-              if not (equal_results pr r) then
-                invalid_argf "Results do not match, starting with: %s" name
-              else
-                r)
+    let () =
+      let results_as_arrays =
+        List.map tests ~f:(fun (name, t) -> name, as_array p (t ()))
+      in
+      match results_as_arrays with
+      | []     -> ()
+      | h :: t ->
+        ignore(List.fold_left t ~init:h
+            ~f:(fun (pname, pt) (name, r) ->
+                  if pt <> r then
+                    invalid_argf "Results between %s and %s differ"
+                      pname name
+                  else
+                    (name, r)))
     in
     tests
 

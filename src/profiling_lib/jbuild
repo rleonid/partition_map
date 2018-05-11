@@ -1,0 +1,9 @@
+(jbuild_version 1)
+
+(library (
+  (name profiling_lib)
+  (synopsis "Common profiling code.")
+  (libraries (partition_map partition_map.Lib08 partition_map.Lib09))
+  (preprocess (pps (bisect_ppx -conditional)))
+  (ocamlopt_flags -O3)
+  ))

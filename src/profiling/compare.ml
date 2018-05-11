@@ -3,12 +3,12 @@
 
 open Printf
 open StdLabels
-open Test
+open Profiling_lib.Test
 
 let () =
   if not !Sys.interactive then begin
-    let which = [`BvAssocs; `Pmas]  in
-    let pars  = Test.default_parameters in
+    let which = [`BvAssoc; `PmaIp;`Pma]  in
+    let pars  = default_parameters in
     let int_tests = IntBenchmarks.generate_tests which pars in
     let floatv_tests = FloatVectorBenchmarks.generate_tests which pars in
     printf "All results are equal\n%!";

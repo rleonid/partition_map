@@ -1,8 +1,9 @@
 (jbuild_version 1)
 
-(executable (
-  (name bench)
+(executables (
+  (names (bench compare))
+  (public_names (bench compare))
   (libraries (partition_map partition_map.Lib08 core_bench))
-  (public_name bench)
   (preprocess (pps (bisect_ppx -conditional)))
   (ocamlopt_flags -O3)))
+

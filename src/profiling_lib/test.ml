@@ -163,7 +163,10 @@ module Benchmarks (C : Calculation) = struct
     else
       let noi = 1 + number_of_intervals () in
       let ss = assign_starts_and_stops last_end noi in
-      List.mapi ~f:(fun i ss -> ss, C.of_int (i mod nov)) ss
+      let starting_value = Random.int nov in
+      List.mapi ~f:(fun i ss ->
+          let j = (i + starting_value) mod nov in
+          ss, C.of_int j) ss
 
   (*
     How we assign to the intervals can be different, and will not be

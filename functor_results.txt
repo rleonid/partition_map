@@ -1,0 +1,15 @@
+All results are equal
+Estimated testing time 30m (9 benchmarks x 3.33333m). Change using -quota SECS.
+┌──────────────────────────────────────────────────────────────────────────────────┬──────────┬────────────┬──────────┬──────────┬────────────┐
+│ Name                                                                             │ Time/Run │    mWd/Run │ mjWd/Run │ Prom/Run │ Percentage │
+├──────────────────────────────────────────────────────────────────────────────────┼──────────┼────────────┼──────────┼──────────┼────────────┤
+│ Ascending (Functor) Pms of Integer values ( 1000, 10000, 1.5, 1.0)               │    1.47s │   810.41Mw │  11.69Mw │  11.69Mw │      7.03% │
+│ Paired Interval partition maps of Integer values ( 1000, 10000, 1.5, 1.0)        │    1.72s │   671.03Mw │   9.76Mw │   9.76Mw │      8.20% │
+│ Ascending partition maps of Integer values ( 1000, 10000, 1.5, 1.0)              │    1.44s │   810.41Mw │  11.69Mw │  11.69Mw │      6.85% │
+│ Ascending (Functor) Pms of Float values addition ( 1000, 10000, 1.5, 1.0)        │    1.39s │   807.21Mw │  12.78Mw │  12.78Mw │      6.61% │
+│ Paired Interval partition maps of Float values addition ( 1000, 10000, 1.5, 1.0) │    1.64s │   616.80Mw │   9.83Mw │   9.83Mw │      7.84% │
+│ Ascending partition maps of Float values addition ( 1000, 10000, 1.5, 1.0)       │    1.38s │   807.21Mw │  12.79Mw │  12.79Mw │      6.57% │
+│ Ascending (Functor) Pms of Float vector ( 1000, 10000, 1.5, 1.0)                 │   20.69s │ 8_413.30Mw │ 111.71Mw │ 111.71Mw │     98.58% │
+│ Paired Interval partition maps of Float vector ( 1000, 10000, 1.5, 1.0)          │   20.99s │ 8_424.60Mw │ 111.91Mw │ 111.91Mw │    100.00% │
+│ Ascending partition maps of Float vector ( 1000, 10000, 1.5, 1.0)                │   20.44s │ 8_413.30Mw │ 111.80Mw │ 111.80Mw │     97.40% │
+└──────────────────────────────────────────────────────────────────────────────────┴──────────┴────────────┴──────────┴──────────┴────────────┘

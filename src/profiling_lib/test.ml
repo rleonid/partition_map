@@ -75,7 +75,7 @@ let parameters_to_encoded
 
 let default_parameters =
   { domain_size = 1000
-  ; number_of_states = 1000
+  ; number_of_states = 10000
   ; average_number_of_values = 1.5
   ; average_number_of_intervals_incr = 1.0
   }
@@ -146,6 +146,7 @@ module type Calculation = sig
      distribution and map them to this data type. *)
   val of_int : int -> t
   val equal : t -> t -> bool
+  val to_string : t -> string
 end
 
 module Benchmarks (C : Calculation) = struct
@@ -270,17 +271,34 @@ module Benchmarks (C : Calculation) = struct
           ~f:(fun a p -> PmaIp.merge C.equal a p C.op))
 
   (* Using partition maps. Pma = Ascending Partition Maps, the default kind.*)
-  module Pma = Partition_map.Ascending
+  module PmaE = Lib091.Partition_map.Ascending
+
+  let states_as_pmae states =
+    Array.map states ~f:(PmaE.of_ascending_interval_list C.equal)
+
+  let time_pmae_merge p pm_states =
+    let size = p.domain_size in
+    let starting_ascending_pm = PmaE.init ~size C.zero in
+    fun () ->
+      `PmaE (Array.fold_left pm_states ~init:starting_ascending_pm
+          ~f:(fun a p -> PmaE.merge C.equal a p C.op))
+
+  module Pma = Partition_map.Ascending(C)
 
   let states_as_pmas states =
-    Array.map states ~f:(Pma.of_ascending_interval_list C.equal)
+    Array.map states ~f:Pma.of_ascending_interval_list
 
   let time_pmas_merge p pm_states =
     let size = p.domain_size in
     let starting_ascending_pm = Pma.init ~size C.zero in
     fun () ->
       `Pma (Array.fold_left pm_states ~init:starting_ascending_pm
-          ~f:(fun a p -> Pma.merge C.equal a p C.op))
+          ~f:(fun a p -> Pma.merge a p C.op))
+      (*`Pma (Array.fold_left pm_states ~init:(0, starting_ascending_pm)
+          ~f:(fun (i, a) p ->
+               printf "%d: length: %d\n%!" i (Pma.length a);
+               (i + 1, Pma.merge a p C.op))
+            |> snd)*)
 
   (* Reduction to array to check that we're computing the same thing. *)
   let as_array pr = function
@@ -289,11 +307,14 @@ module Benchmarks (C : Calculation) = struct
         let a = Array.make pr.domain_size C.zero in
         Bv_assocs.iter_values b ~f:(fun i v -> a.(i) <- v);
         a
-    | `Pma p    ->
+    | `PmaE p   -> PmaE.to_array p
+    | `Pma p    -> Pma.to_array p
+                     (*
         let a = Array.make pr.domain_size C.zero in
         Pma.fold_indices_and_values p ~init:()
           ~f:(fun () i v -> a.(i) <- v);
         a
+                        *)
     | `PmaIp p ->
         let a = Array.make pr.domain_size C.zero in
         PmaIp.fold_indices_and_values p ~init:()
@@ -322,9 +343,13 @@ module Benchmarks (C : Calculation) = struct
             let pmas   = states_as_pmas_ip states in
             name "Paired Interval partition maps"
             , time_pmas_ip_merge p pmas
+        | `PmaE       ->
+            let pmas   = states_as_pmae states in
+            name "Ascending partition maps"
+            , time_pmae_merge p pmas
         | `Pma        ->
             let pmas   = states_as_pmas states in
-            name "Ascending partition maps"
+            name "Ascending (Functor) Pms"
             , time_pmas_merge p pmas)
     in
     let () =
@@ -354,6 +379,7 @@ module IntBenchmarks =
     let op = ( + )
     let of_int x = x
     let equal (x : int) y = x = y
+    let to_string = string_of_int
   end)
 
 module FloatBenchmarks =
@@ -364,6 +390,7 @@ module FloatBenchmarks =
     let op = ( +. )
     let of_int = float
     let equal (x : float) y = x = y
+    let to_string = string_of_float
   end)
 
 module FloatMBenchmarks =
@@ -374,6 +401,7 @@ module FloatMBenchmarks =
     let op = ( *. )
     let of_int x = float (x + 1)  (* Avoid zero... otherwise PM's have a HUGE advantage. *)
     let equal (x : float) y = x = y
+    let to_string = string_of_float
   end)
 
 module IntVector = struct
@@ -406,6 +434,9 @@ module IntVector = struct
 
   let equal t1 t2 =
     t1.x = t2.x && t1.y = t2.y && t1.z = t2.z
+
+  let to_string {x;y;z} =
+    sprintf "{x=%d;y=%d;z=%d}" x y z
 
 end (* IntVector *)
 
@@ -444,8 +475,9 @@ module FloatVector = struct
   let equal t1 t2 =
     t1.x = t2.x && t1.y = t2.y && t1.z = t2.z
 
+  let to_string {x;y;z} =
+    sprintf "{x=%f;y=%f;z=%f}" x y z
+
 end (* FloatVector *)
 
 module FloatVectorBenchmarks = Benchmarks (FloatVector)
-
-

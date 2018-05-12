@@ -67,7 +67,7 @@ let parameters_to_encoded
   ; average_number_of_values
   ; average_number_of_intervals_incr
   } =
-  sprintf "( %d, %d, %f, %f )"
+  sprintf "( %d, %d, %.1f, %.1f)"
     domain_size
     number_of_states
     average_number_of_values

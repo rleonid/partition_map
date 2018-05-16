@@ -43,8 +43,8 @@ The deciding factor of which implementation to use depends upon the stored
 data and desired access pattern.
 Most data structures privilege value setting and getting;
 accessing and mutating the value associated with any key in the domain.
-A partition map, is a different technique, where we want to prioritize
-\emph{merging} above other access patterns.
+A partition map, is a different technique,
+where we prioritize \emph{merging} above other access patterns.
 
 As a running motivating example,
 let $D$ be the positive integers up to $100$,
@@ -84,9 +84,10 @@ such as
 \end{displaymath}
 
 The range, $R$, is specified by each function.
-It may vary, but for our purposes we want to emphasize that it is smaller
+It may vary, but for our purposes I want to emphasize that it is smaller
 than the domain.
-Lastly, we are not concerned with composition,
+Lastly,
+we are not concerned with composition,
 cases such as $g(x)=f_{j}(f_{i}(x))$.
 
 Briefly, as a point of comparison,
@@ -699,11 +700,6 @@ It is easy to see that in this case,
 Algorithm \ref{Alm1},
 still checks for intersections $m^{2}$ times,
 while Algorithm \ref{Alm4} only $m$ times.
-Another important point to consider is the case of merging more than 2
-functions, (eg.$g = f_{1}+f_{2}+f_{3}$).
-In this case, the pathological case would still be $O(m^{2}n^{2}o^{2})$
-(where $o = L_{3}$),
-which can be much better than $O(|D|^{3})$.
 A final appeal of this approach is that it feels pretty natural,
 it is how I think most human ``computers'' would solve this problem.
 
@@ -1205,7 +1201,7 @@ hash a set would open up the possibility of using hash table like
 or Patricia tree like data structures (as previously
 described\cite{Okasaki1998}).
 For most purposes,
-we can expect that $|R|<2^{64}$,
+we can expect that $|D|<2^{64}$,
 so a 64-bit word size would be sufficient.
 But we want two properties for this function.
 First, efficient computation,

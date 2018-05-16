@@ -142,6 +142,8 @@ module type Calculation = sig
   type t
   val zero : t
   val op : t -> t -> t
+  val op3 : t -> t -> t -> t
+
   (* How we initialize values. We take positive integer values from the Poisson
      distribution and map them to this data type. *)
   val of_int : int -> t
@@ -149,6 +151,25 @@ module type Calculation = sig
 end
 
 module Benchmarks (C : Calculation) = struct
+
+  (*let random_assignment p =
+    let number_of_values = poisson p.average_number_of_values in
+    let average_number_of_intervals =
+      p.average_number_of_values +. p.average_number_of_intervals_incr
+    in
+    let number_of_intervals = poisson average_number_of_intervals in
+    let last_end = p.domain_size - 1 in
+    let nov = 1 + number_of_values () in
+    if nov = 1 then
+      [(0, last_end), 0]
+    else
+      let noi = 1 + number_of_intervals () in
+      let ss = assign_starts_and_stops last_end noi in
+      let starting_value = Random.int nov in
+      List.mapi ~f:(fun i ss ->
+          let j = (i + starting_value) mod nov in
+          ss, j) ss
+    *)
 
   let random_assignment p =
     let number_of_values = poisson p.average_number_of_values in
@@ -189,6 +210,34 @@ module Benchmarks (C : Calculation) = struct
             done));
       `Array acc
 
+  let time_list_merge3 p list_states =
+    let acc = Array.make p.domain_size C.zero in
+    let n = Array.length list_states in
+    let rec loop2 l1 l2 = match l1, l2 with
+      | [], []  -> ()
+      | [],  _
+      | _,  []  -> invalid_arg "One interval too empty!"
+      | ((s1, e1), v1) :: t1
+      , ((s2, e2), v2) :: t2 ->
+          assert (s1 = s2);
+          if e1 = e2 then begin
+            for i = s1 to e1 do acc.(i) <- C.op3 acc.(i) v1 v2 done;
+            loop2 t1 t2
+          end else if e1 < e2 then begin
+            for i = s1 to e1 do acc.(i) <- C.op3 acc.(i) v1 v2 done;
+            loop2 (((e1+1,e2),v1)::t1) t2
+          end else (* e1 > e2 *)
+            for i = s1 to e2 do acc.(i) <- C.op3 acc.(i) v1 v2 done;
+            loop2 t1 (((e2+1,e1),v2)::t2)
+    in
+    fun () ->
+      for i = 0 to n - 2 do
+        let ls1 = list_states.(i) in
+        let ls2 = list_states.(i+1) in
+        loop2 ls1 ls2
+      done;
+      `Array acc
+
   (* Using naive matrices. *)
 
   let states_as_arrays p states =
@@ -206,6 +255,20 @@ module Benchmarks (C : Calculation) = struct
         for i = 0 to last_end do
           acc.(i) <- C.op acc.(i) a.(i)
         done);
+      `Array acc
+
+  let time_array_merge3 p array_states =
+    let acc = Array.make p.domain_size C.zero in
+    let last_end = p.domain_size - 1 in
+    let n = Array.length array_states in
+    fun () ->
+      for i = 0 to n - 2 do
+        let a = array_states.(i) in
+        let b = array_states.(i + 1) in
+        for i = 0 to last_end do
+          acc.(i) <- C.op3 acc.(i) a.(i) b.(i)
+        done;
+      done;
       `Array acc
 
   (* Using association lists backed by bitvectors lists. *)
@@ -257,6 +320,17 @@ module Benchmarks (C : Calculation) = struct
       `Bv (Array.fold_left bv_states ~init ~f:(fun s1 s2 ->
             Bv_assocs.map2 s1 s2 ~f:C.op))
 
+  let time_bv_assoc_merge3 bv_states =
+    let acc = ref (Bv_assocs.init_everything C.zero) in
+    let n = Array.length bv_states in
+    fun () ->
+      for i = 0 to n - 2 do
+        let b1 = bv_states.(i) in
+        let b2 = bv_states.(i+1) in
+        acc := Bv_assocs.map3 !acc b1 b2 ~f:C.op3
+      done;
+      `Bv (!acc)
+
   (* Using old partition maps. *)
   module PmaIp = Lib09.Partition_map.Ascending
   let states_as_pmas_ip states =
@@ -268,6 +342,18 @@ module Benchmarks (C : Calculation) = struct
     fun () ->
       `PmaIp (Array.fold_left pm_states ~init:starting_ascending_pm
           ~f:(fun a p -> PmaIp.merge C.equal a p C.op))
+
+  let time_pmas_ip_merge3 p pm_states =
+    let size = p.domain_size in
+    let acc = ref (PmaIp.init ~size C.zero) in
+    let n = Array.length pm_states in
+    fun () ->
+      for i = 0 to n - 2 do
+        let p1 = pm_states.(i) in
+        let p2 = pm_states.(i+1) in
+        acc := PmaIp.merge3 C.equal !acc p1 p2 C.op3
+      done;
+      `PmaIp !acc
 
   (* Using partition maps. Pma = Ascending Partition Maps, the default kind.*)
   module Pma = Partition_map.Ascending
@@ -281,6 +367,18 @@ module Benchmarks (C : Calculation) = struct
     fun () ->
       `Pma (Array.fold_left pm_states ~init:starting_ascending_pm
           ~f:(fun a p -> Pma.merge C.equal a p C.op))
+
+  let time_pmas_merge3 p pm_states =
+    let size = p.domain_size in
+    let acc = ref (Pma.init ~size C.zero) in
+    let n = Array.length pm_states in
+    fun () ->
+      for i = 0 to n - 2 do
+        let p1 = pm_states.(i) in
+        let p2 = pm_states.(i+1) in
+        acc := Pma.merge3 C.equal !acc p1 p2 C.op3
+      done;
+      `Pma !acc
 
   (* Reduction to array to check that we're computing the same thing. *)
   let as_array pr = function
@@ -300,32 +398,57 @@ module Benchmarks (C : Calculation) = struct
           ~f:(fun () i v -> a.(i) <- v);
         a
 
-  let generate_tests which p =
+  let name p s =
+    sprintf "%s of %s %s" s C.description (parameters_to_encoded p)
+
+  let which_to_tests p states = function
+    | `NaiveList  ->
+        name p "Naive lists into array"
+        , time_list_merge p states
+    | `NaiveArray ->
+        let arrays = states_as_arrays p states in
+        name p "Naive two array"
+        , time_array_merge p arrays
+    | `BvAssoc    ->
+        let bvas   = states_as_bv_assocs p states in
+        name p "Bitvector backed assocs"
+        , time_bv_assoc_merge bvas
+    | `PmaIp      ->
+        let pmas   = states_as_pmas_ip states in
+        name p "Paired Interval partition maps"
+        , time_pmas_ip_merge p pmas
+    | `Pma        ->
+        let pmas   = states_as_pmas states in
+        name p "Ascending partition maps"
+        , time_pmas_merge p pmas
+
+  let which_to_tests3 p states = function
+    | `NaiveList  ->
+        name p "Naive lists into array"
+        , time_list_merge3 p states
+    | `NaiveArray ->
+        let arrays = states_as_arrays p states in
+        name p "Naive two array"
+        , time_array_merge3 p arrays
+    | `BvAssoc    ->
+        let bvas   = states_as_bv_assocs p states in
+        name p "Bitvector backed assocs"
+        , time_bv_assoc_merge3 bvas
+    | `PmaIp      ->
+        let pmas   = states_as_pmas_ip states in
+        name p "Paired Interval partition maps"
+        , time_pmas_ip_merge3 p pmas
+    | `Pma        ->
+        let pmas   = states_as_pmas states in
+        name p "Ascending partition maps"
+        , time_pmas_merge3 p pmas
+
+  let generate_tests ?(two_or_three=`Two) which  p =
     let states = states p in
-    let name s =
-      sprintf "%s of %s %s" s C.description (parameters_to_encoded p)
-    in
     let tests =
-      List.map which ~f:(function
-        | `NaiveList  ->
-            name "Naive lists into array"
-            , time_list_merge p states
-        | `NaiveArray ->
-            let arrays = states_as_arrays p states in
-            name "Naive two array"
-            , time_array_merge p arrays
-        | `BvAssoc    ->
-            let bvas   = states_as_bv_assocs p states in
-            name "Bitvector backed assocs"
-            , time_bv_assoc_merge bvas
-        | `PmaIp      ->
-            let pmas   = states_as_pmas_ip states in
-            name "Paired Interval partition maps"
-            , time_pmas_ip_merge p pmas
-        | `Pma        ->
-            let pmas   = states_as_pmas states in
-            name "Ascending partition maps"
-            , time_pmas_merge p pmas)
+      match two_or_three with
+      | `Two -> List.map which ~f:(which_to_tests p states)
+      | `Three -> List.map which ~f:(which_to_tests3 p states)
     in
     let () =
       let results_as_arrays =
@@ -352,6 +475,7 @@ module IntBenchmarks =
     type t = int
     let zero = 0
     let op = ( + )
+    let op3 x y z = x + y + z
     let of_int x = x
     let equal (x : int) y = x = y
   end)
@@ -362,6 +486,7 @@ module FloatBenchmarks =
     type t = float
     let zero = 0.0
     let op = ( +. )
+    let op3 x y z = x +. y +. z
     let of_int = float
     let equal (x : float) y = x = y
   end)
@@ -372,6 +497,7 @@ module FloatMBenchmarks =
     type t = float
     let zero = 1.0
     let op = ( *. )
+    let op3 x y z = x *. y *. z
     let of_int x = float (x + 1)  (* Avoid zero... otherwise PM's have a HUGE advantage. *)
     let equal (x : float) y = x = y
   end)
@@ -394,6 +520,11 @@ module IntVector = struct
     ; y = t1.y + t2.y
     ; z = t1.z + t2.z
     }
+  let op3 t1 t2 t3 =
+    { x = t1.x + t2.x + t3.x
+    ; y = t1.y + t2.y + t3.y
+    ; z = t1.z + t2.z + t3.z
+    }
 
   let of_int t =
     let rec r = function
@@ -415,37 +546,76 @@ module FloatVector = struct
 
   let description = "Float vector"
 
-  type t =
-    { x : float
-    ; y : float
-    ; z : float
-    }
+  type t = float array
 
   let zero =
-    { x = 0.
-    ; y = 0.
-    ; z = 0.
-    }
+    [|0.;0.;0.;0.;0.;|]
+
+  let dx = 1.e-6
+
+  let is_nan x = x <> x
+
+  let close_enough x y =
+    if is_nan x then
+      if is_nan y then
+        true
+      else
+        false
+    else if is_nan y then
+      false
+    else
+      let d = x -. y in
+      (abs_float d) < dx
+
+(*
   let op t1 t2 =
-    { x = t1.x +. t2.x
-    ; y = t1.y +. t2.y
-    ; z = t1.z +. t2.z
-    }
+    let a = Array.make 5 0. in
+    let carry = ref 0. in
+    for i = 0 to 4 do
+      let j = float (1 lsl (5 - i)) in
+      let s = !carry +. t1.(i) +. t2.(i) in
+      if close_enough s j then begin
+        a.(i) <- 0.;
+        carry := 1.
+      end else begin
+        a.(i) <- s;
+        carry := 0.
+      end
+    done;
+    a
 
   let of_int t =
     let rec r = function
-      | 0 -> { x = 1.; y = 0.; z = 0.}
-      | 1 -> { x = 0.; y = 1.; z = 0.}
-      | 2 -> { x = 0.; y = 0.; z = 1.}
+      | 0 -> [|1.;0.;0.;0.;0.|]
+      | 1 -> [|0.;1.;0.;0.;0.|]
+      | 2 -> [|0.;0.;1.;0.;0.|]
+      | 3 -> [|0.;0.;0.;1.;0.|]
+      | 4 -> [|0.;0.;0.;0.;1.|]
       | n -> op (r (n - 1)) (r (n - 2))
+    in
+    r t
+   *)
+
+  let op t1 t2 =
+    Array.map2 t1 t2 ~f:(+.)
+
+  let op3 t1 t2 t3 =
+    Array.init (Array.length t1) ~f:(fun i -> t1.(i) +. t2.(i) +. t3.(i))
+
+  let of_int t =
+    let rec r = function
+      | 0 -> [|1.;0.;0.;0.;0.|]
+      | 1 -> [|0.;1.;0.;0.;0.|]
+      | 2 -> [|0.;0.;1.;0.;0.|]
+      | 3 -> [|0.;0.;0.;1.;0.|]
+      | 4 -> [|0.;0.;0.;0.;1.|]
+      | n -> r (n mod 5)
     in
     r t
 
   let equal t1 t2 =
-    t1.x = t2.x && t1.y = t2.y && t1.z = t2.z
+    Array.for_all ~f:(fun x -> x) (Array.map2 ~f:close_enough t1 t2)
 
 end (* FloatVector *)
 
 module FloatVectorBenchmarks = Benchmarks (FloatVector)
-
-

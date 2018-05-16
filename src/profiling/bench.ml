@@ -14,9 +14,10 @@ let () =
     let which = [(*`NaiveList;*) `NaiveArray; `Pma]  in
     let pars  =
       generate_parameters
+        ~average_number_of_values:0.5
         (*~average_number_of_intervals_incr:2.0 *)
-        ~domain_sizes:[100; 500; 1000; 5000]
-        ~number_of_states:[100; 500; 1000; 5000;]
+        ~domain_sizes:[(*100; 500;*) 1000; 5000 ]
+        ~number_of_states:[100; 250;500;750; 1000; 2500; 5000;]
         ()
     in
     let open Core_bench.Std in
@@ -27,9 +28,9 @@ let () =
       |> List.concat
     in
     let tests = List.concat
-      [ m IntBenchmarks.generate_tests
+      [ m (IntBenchmarks.generate_tests ~two_or_three:`Two)
       (*; m FloatBenchmarks.generate_tests *)
-      ; m FloatVectorBenchmarks.generate_tests
+       (*m FloatVectorBenchmarks.generate_tests# *)
       ]
     in
     printf "All results are equal\n%!";

@@ -13,16 +13,16 @@ module Interval = struct
 module Iab = Ints_as_bits
 
 (* We encode an interval (pair) of integers in one integer by putting the start
- * (first) into the higher half of the bits an the end (second) into the lower
+ * (first) into the higher half of the bits and the end (second) into the lower
  * half. This implies that we reduce the total domain in half, but even on
  * 32-bit systems, that is more than enough for our goals.
  *
- * Since start occupies the higher order bits, once nice consequences is that
+ * Since start occupies the higher order bits, one nice consequences is that
  * we can test for comparison and equality (the most common case) without
- * looking at the end in most cases, ie. in a single operation.
+ * looking at the end in most cases, in a single operation.
  *
  * This means that the new range must start at 1 and 0 is no longer a valid
- * element in our partition. We'll use 0 to encode a None
+ * element in our partition. We'll use 0 to encode a None.
  *)
 type t = int
 
@@ -411,6 +411,7 @@ module Set = struct
   type t = Interval.t list
 
   let empty = []
+
   let is_empty = function
     | []  -> true
     | [i] -> Interval.is_none i
@@ -521,7 +522,7 @@ module Set = struct
     in
     start
 
-  let all_intersections =
+  let intersection_and_differences =
     let open Interval in
     let rec loop l1 l2 = match l1, l2 with
       | _,  []                                   -> [],           l1,              l2
@@ -543,7 +544,7 @@ module Set = struct
     , h2 :: t2 ->
       let open Interval in
       let inter, m1, m2 = aligned_inter_diff2 h1 h2 in
-      let i, r1, r2 = all_intersections (cons_if_nnone m1 t1) (cons_if_nnone m2 t2) in
+      let i, r1, r2 = intersection_and_differences (cons_if_nnone m1 t1) (cons_if_nnone m2 t2) in
       (inter :: i), r1, r2
 
   let all_intersections3 =
@@ -744,13 +745,13 @@ module Set = struct
     descend t1 t2 (Interval.none_t, Interval.none_t)
 
   (* Though we write the underlying algorithm in CPS style to try and avoid
-    * some excessive list allocations and merging against last created element
-    * I can't think of a better way to guarantee that the result is in order
-    * during construction... So we have to sort and then remerge ...
-    *
-    * Maybe the right approach is to maintain a reverse-ordered list into
-    * which we'll push the new elements?
-    * *)
+   * some excessive list allocations and merging against last created element
+   * I can't think of a better way to guarantee that the result is in order
+   * during construction. So we have to sort and then re-merge.
+   *
+   * Maybe the right approach is to maintain a reverse-ordered list into
+   * which we'll push the new elements?
+   * *)
   let cpair_norm l =
     let sorted = List.sort ~cmp:Interval.compare l in
     let rec dedup p = function
@@ -786,156 +787,42 @@ module Set = struct
 
 end (* Set *)
 
+type 'a equality = 'a -> 'a -> bool
+
 (* Things start out in descending order when we construct the partition, but
   when we 'reverse' it they are constructed into an ascending order that is
   better for merging. *)
-module rec Descending : sig
-
-  type +'a t
-
-  (* Empty constructors. *)
-  val empty : 'a t
-
-  (* Initializers. These take a value and either assume an entry (the 'first' one
-    in the descending case) or all of them (pass the size of the partition, the
-    resulting [t] has indices [[0,size)] ) in the ascending case. *)
-  val init_first : 'a -> 'a t
-
-  val to_string : 'a t -> ('a -> string) -> string
-
-  (* Observe a value for the next element. *)
-  val add : 'a -> 'a t -> 'a t
-
-end (* Descending *) = struct
+module Descending = struct
 
   type +'a t = (Interval.t * 'a) list
 
   let empty = []
 
+  let is_empty = function
+    | []  -> true
+    | _   -> false
+
   (* Initializers *)
-  let init_first v =
+  let singleton v =
     [Interval.make 0 0, v]
+
+  let size = function
+    | []  -> 0
+    | (s, _v) :: _ -> Interval.end_ s + 1
 
   let to_string ld to_s =
     string_of_list ld ~sep:";" ~f:(fun (i, v) ->
       sprintf "%s:%s" (Interval.to_string i) (to_s v))
 
-  let add v l = match l with
-    | []                       -> [Interval.make 0 0, v]
-    | (s, ov) :: t when v = ov -> ((Interval.extend_one s, v) :: t)
-    | ((s, _) :: _)            -> let e = 1 + Interval.end_ s in
-                                  (Interval.make e e, v) :: l
+  let add ~eq v l = match l with
+    | []                        -> [Interval.make 0 0, v]
+    | (s, ov) :: t when eq v ov -> ((Interval.extend_one s, v) :: t)
+    | ((s, _) :: _)             -> let e = 1 + Interval.end_ s in
+                                   (Interval.make e e, v) :: l
 
-end (* Descending *) and Ascending :
+end (* Descending *)
 
-sig
-
-  type +'a t
-
-  val of_descending : ('a -> 'a -> bool) -> 'a Descending.t -> 'a t
-
-  val of_ascending_interval_list : ('a -> 'a -> bool)
-                  -> ((int * int) * 'a) list
-                  -> 'a t
-
-  (* empty should only be used as a place holder (ex. initializing an array)
-  * and not for computation. TODO: refactor this. *)
-  val empty : 'a t
-
-  val init : size:int -> 'a -> 'a t
-
-  val to_string : 'a t -> ('a -> string) -> string
-
-  val equal : ('a -> 'a -> bool)
-            -> 'a t
-            -> 'a t
-            -> bool
-
-  (* [get t i] returns the value associated  with the [i]'th element.
-
-    @raise {Not_found} if [i] is outside the range [0, (size t)). *)
-  val get : 'a t -> int -> 'a
-
-  (** Set a value. *)
-  val set : 'a t -> int -> 'a -> 'a t
-
-  (* Map the values, the internal storage doesn't change. *)
-  val map : 'a t
-          -> ('b -> 'b -> bool)
-          -> f:('a -> 'b)
-          -> 'b t
-
-  (* Merge partition maps. Technically these are "map"'s but they are purposefully
-    named merge since they're only implemented for {ascending} partition maps. *)
-  val merge : eq:('c -> 'c -> bool)
-              -> 'a t
-              -> 'b t
-              -> ('a -> 'b -> 'c)
-              -> 'c t
-
-  val merge3 : eq:('d -> 'd -> bool)
-              -> 'a t
-              -> 'b t
-              -> 'c t
-              -> ('a -> 'b -> 'c -> 'd)
-              -> 'd t
-
-  (** [merge4] takes a specific {eq}uality predicate because it compreses new
-      values generated by the mapping. When we compute a new value from the 4
-      intersecting elements, we will scan an accumulator and add it if it is
-      [not] equal to the other elements in the accumulator. Specifying, a good
-      predicate for such an operation is important as it is intended to constrain
-      the size of the final result. *)
-  val merge4 : eq:('e -> 'e -> bool)
-              -> 'a t
-              -> 'b t
-              -> 'c t
-              -> 'd t
-              -> ('a -> 'b -> 'c -> 'd -> 'e)
-              -> 'e t
-
-  (* Fold over the values. *)
-  val fold_values : 'a t
-                  -> f:('b -> 'a -> 'b)
-                  -> init:'b
-                  -> 'b
-  (* Fold over the values passing the underlying set to the lambda. *)
-  val fold_set_and_values : 'a t
-                          -> f:('b -> Set.t -> 'a -> 'b)
-                          -> init:'b
-                          -> 'b
-
-  (** Fold over the indices [0,size) and values. *)
-  val fold_indices_and_values : 'a t
-                              -> f:('b -> int -> 'a -> 'b)
-                              -> init:'b
-                              -> 'b
-
-  (* Iterate over the entries and values. *)
-  val iter_set : 'a t -> f:(int -> 'a -> unit) -> unit
-
-  (* Return the values, in ascending order, in an array. *)
-  val to_array : 'a t -> 'a array
-
-  (** Diagnostic methods. These are not strictly necessary for the operations of
-      the Parametric PHMM but are exposed here for interactive use. *)
-
-  (* The size of the partition. Specifically, if [size t = n] then [get t i] will
-    succeed for [0, n).  *)
-  val size : 'a t -> int
-
-  (* The number of unique elements in the underlying assoc . *)
-  val length : 'a t -> int
-
-
-  val descending : 'a t -> 'a Descending.t
-
-  val cpair : f:('a -> 'a -> 'b)
-            -> ('b -> 'b -> bool)
-            -> 'a t
-            -> 'b t
-
-end = struct
+module Ascending = struct
 
   type +'a t =
     | E                               (* empty, merging against this will fail! *)
@@ -946,6 +833,14 @@ end = struct
     | S of { size   : int
            ; values : (Set.t * 'a) list
            }
+
+  (* Empty Constructors *)
+  let empty = E
+
+  let is_empty = function
+    | E   -> true
+    | U _
+    | S _ -> false
 
   (* [merge_or_add_to_end eq s v l] rebuild the elements of [l] such that if
     any of the values (snd) [eq v] then merge the sets [s] and (fst). If no
@@ -962,17 +857,16 @@ end = struct
     in
     loop l
 
-
   let ascending_t eq l =
     List.fold_left l ~init:[] ~f:(fun acc (i, v) ->
       merge_or_add_to_end eq (Set.of_interval i) v acc)
     |> List.sort ~cmp:(fun (s1, _) (s2, _) -> Set.compare s1 s2)
 
-  let of_descending eq l =
+  let of_descending ~eq l =
     let size_a l = List.fold_left l ~init:0 ~f:(fun a (s, _) -> a + Set.size s) in
     let a = ascending_t eq l in            (* assert (Ascending.invariant l); *)
     match a with
-    | []          -> invalid_arg "Empty descending!"
+    | []          -> E
     | [set,value] -> if Set.universal set then
                        U { size = Set.size set; set; value}
                      else
@@ -980,9 +874,8 @@ end = struct
                           (Set.to_string set)
     | values      -> S {size = size_a values; values }
 
-  let of_ascending_interval_list eq l = match l with
-    | []          ->
-      invalid_arg "of_ascending_interval_list: Empty argument."
+  let of_ascending_interval_list ~eq l = match l with
+    | []          -> E
     | [(s,e), v]  ->
         if s <> 0 then
           invalid_argf "Doesn't start with zero but: %d" s
@@ -1013,13 +906,12 @@ end = struct
         S { size; values = ascending_t eq as_intervals }
 
   let descending = function
-    | E              -> invalid_arg "Can't convert empty to descending"
+    | E              -> []
     | U {set; value} -> [List.hd set, value]
     | S {values}     ->
         List.map values ~f:(fun (s, v) -> List.map s ~f:(fun i -> i, v))
         |> List.concat
         |> List.sort ~cmp:(fun (i1, _) (i2, _) -> Interval.compare i2 i1)
-
 
   let invariant =
     let rec loop = function
@@ -1032,12 +924,9 @@ end = struct
     in
     loop
 
-  (* Empty Constructors *)
-  let empty = E
-
   let init ~size value =
-    let i = Interval.make 0 (size - 1) in
-    U { size; set = Set.of_interval i; value}
+    let set = Set.of_interval (Interval.make 0 (size - 1)) in
+    U { size; set; value}
 
   (* Properties *)
   let asc_to_string la to_s =
@@ -1045,22 +934,22 @@ end = struct
         sprintf "[%s]:%s" (Set.to_string s) (to_s v))
 
   let to_string t to_s = match t with
-    | E             -> "Empty!"
+    | E             -> "Empty"
     | U {set;value} -> sprintf "%s:%s" (Set.to_string set) (to_s value)
     | S { values }  -> asc_to_string values to_s
 
-  let equal e t1 t2 = match t1, t2 with
+  let equal ~eq t1 t2 = match t1, t2 with
     | E, E                                  ->
         true
     | U { size = s1; set = t1; value = v1 }
     , U { size = s2; set = t2; value = v2 } ->
-        s1 = s2 && t1 = t2 && e v1 v2
+        s1 = s2 && t1 = t2 && eq v1 v2
     | S { size = s1; values = v1 }
     , S { size = s2; values = v2 }          ->
         s1 = s2 &&
           List.fold_left2 v1 v2 ~init:true
-            ~f:(fun eq (s1, v1) (s2, v2) ->
-                  eq && s1 = s2 && e v1 v2)
+            ~f:(fun e (s1, v1) (s2, v2) ->
+                  e && s1 = s2 && eq v1 v2)
     | _, _                                  ->
         false
 
@@ -1078,7 +967,7 @@ end = struct
 
   (* Getters/Setters *)
   let get t i = match t with
-    | E             -> invalid_arg "Can't get from empty"
+    | E             -> raise Not_found
     | U { value }   -> value
     | S { values }  ->
         let rec loop = function
@@ -1092,7 +981,7 @@ end = struct
         loop values
 
   let set t i value = match t with
-    | E                 -> invalid_arg "Can't set from empty"
+    | E                 -> invalid_arg "Cannto set into an empty partition map."
     | U {size; set}     -> U { set; size; value}
     | S {size; values}  ->
       let open Interval in
@@ -1108,7 +997,7 @@ end = struct
               | None,    _     -> h :: loop t
               | Some [], after -> (Set.of_interval ii, value) :: (after, ov) :: t
               (* Technically this isn't scanning l again to find the
-                appropriate set for {v}, we're just inserting it and maintaing
+                appropriate set for {v}, we're just inserting it and maintaining
                 the invariant that the sets inside are ordered.
                 I'm not actually using this method in ParPHMM so I'll avoid
                 a better implementation for now. *)
@@ -1160,8 +1049,8 @@ end = struct
   (* The reason for all this logic. *)
   let rec start2 eq f l1 l2 = match l1, l2 with
     | [],     []      -> []
-    | [],      s      -> invalid_argf "start2 different lengths! l2: %s" (asc_sets_to_str s)
-    |  s,     []      -> invalid_argf "start2 different lengths! l1: %s" (asc_sets_to_str s)
+    | [],      s      -> invalid_argf "merge2 different lengths! l2: %s" (asc_sets_to_str s)
+    |  s,     []      -> invalid_argf "merge2 different lengths! l1: %s" (asc_sets_to_str s)
     | (s1, v1) :: t1
     , (s2, v2) :: t2  ->
         let intersect, r1, r2 = Set.must_match_at_beginning s1 s2 in
@@ -1171,8 +1060,8 @@ end = struct
         loop2 eq f acc nt1 nt2
   and loop2 eq f acc l1 l2 = match l1, l2 with
     | [],     []      -> acc
-    | [],      s      -> invalid_argf "loop2 different lengths! l2: %s" (asc_sets_to_str s)
-    |  s,     []      -> invalid_argf "loop2 different lengths! l1: %s" (asc_sets_to_str s)
+    | [],      s      -> invalid_argf "merge2 different lengths! l2: %s" (asc_sets_to_str s)
+    |  s,     []      -> invalid_argf "merge2 different lengths! l1: %s" (asc_sets_to_str s)
     | (s1, v1) :: t1
     , (s2, v2) :: t2  ->
         let intersect, r1, r2 = Set.must_match_at_beginning s1 s2 in
@@ -1181,14 +1070,13 @@ end = struct
         let nv = f v1 v2 in
         let nacc = merge_or_add_to_end eq intersect nv acc in
         loop2 eq f nacc nt1 nt2
-  (* TODO: There is a bug here where I'm not checking for matching ends.
-    * I should functorize or somehow parameterize the construction of these
-    * such that I don't worry about this. *)
-  and merge ~eq t1 t2 f =
+  and merge t1 t2 ~eq ~f =
     match t1, t2 with
+    | E , E                       ->
+        E
     | E , _
     | _ , E                       ->
-      invalid_argf "Can't merge empty"
+        invalid_argf "Trying to merge an empty with a non empty partition map."
     | U {size = s1; value = v1; set}
     , U {size = s2; value = v2}   ->
         size_guard2 s1 s2 (fun size ->
@@ -1222,9 +1110,9 @@ end = struct
   let rec start3 eq f l1 l2 l3 =
     match l1, l2, l3 with
     | [],     [],     []  -> []
-    | [],      s,      _  -> invalid_argf "start3 different lengths! l2: %s" (asc_sets_to_str s)
-    |  _,     [],      s  -> invalid_argf "start3 different lengths! l3: %s" (asc_sets_to_str s)
-    |  s,      _,     []  -> invalid_argf "start3 different lengths! l1: %s" (asc_sets_to_str s)
+    | [],      s,      _  -> invalid_argf "merge3 different lengths! l2: %s" (asc_sets_to_str s)
+    |  _,     [],      s  -> invalid_argf "merge3 different lengths! l3: %s" (asc_sets_to_str s)
+    |  s,      _,     []  -> invalid_argf "merge3 different lengths! l1: %s" (asc_sets_to_str s)
     | (s1, v1) :: t1
     , (s2, v2) :: t2
     , (s3, v3) :: t3      ->
@@ -1237,9 +1125,9 @@ end = struct
   and loop3 eq f acc l1 l2 l3 =
     match l1, l2, l3 with
     | [],     [],     []  -> acc     (* We insert at the end, thereby preserving order *)
-    | [],      s,      _  -> invalid_argf "loop3 different lengths! l2: %s" (asc_sets_to_str s)
-    |  _,     [],      s  -> invalid_argf "loop3 different lengths! l3: %s" (asc_sets_to_str s)
-    |  s,      _,     []  -> invalid_argf "loop3 different lengths! l1: %s" (asc_sets_to_str s)
+    | [],      s,      _  -> invalid_argf "merge3 different lengths! l2: %s" (asc_sets_to_str s)
+    |  _,     [],      s  -> invalid_argf "merge3 different lengths! l3: %s" (asc_sets_to_str s)
+    |  s,      _,     []  -> invalid_argf "merge3 different lengths! l1: %s" (asc_sets_to_str s)
     | (s1, v1) :: t1
     , (s2, v2) :: t2
     , (s3, v3) :: t3      ->
@@ -1250,13 +1138,14 @@ end = struct
         let nv = f v1 v2 v3 in
         let nacc = merge_or_add_to_end eq intersect nv acc in
         loop3 eq f nacc nt1 nt2 nt3
-  and merge3 ~eq t1 t2 t3 f =
+  and merge3 t1 t2 t3 ~eq ~f =
     match t1, t2, t3 with
+    | E , E , E                   ->
+        E
     | E , _ , _
     | _ , E , _
     | _ , _ , E                   ->
-      invalid_argf "Can't merge3 empty"
-
+        invalid_argf "Trying to merge an empty with a non empty partition map."
     | U {size = s1; value = v1; set}
     , U {size = s2; value = v2}
     , U {size = s3; value = v3}   ->
@@ -1314,10 +1203,10 @@ end = struct
   let rec start4 eq f l1 l2 l3 l4 =
     match l1, l2, l3, l4 with
     | [],     [],     [],     []      -> []
-    | [],      s,      _,      _      -> invalid_argf "start4 different lengths! l2: %s" (asc_sets_to_str s)
-    |  _,     [],      s,      _      -> invalid_argf "start4 different lengths! l3: %s" (asc_sets_to_str s)
-    |  _,      _,     [],      s      -> invalid_argf "start4 different lengths! l4: %s" (asc_sets_to_str s)
-    |  s,      _,      _,     []      -> invalid_argf "start4 different lengths! l1: %s" (asc_sets_to_str s)
+    | [],      s,      _,      _      -> invalid_argf "merge4 different lengths! l2: %s" (asc_sets_to_str s)
+    |  _,     [],      s,      _      -> invalid_argf "merge4 different lengths! l3: %s" (asc_sets_to_str s)
+    |  _,      _,     [],      s      -> invalid_argf "merge4 different lengths! l4: %s" (asc_sets_to_str s)
+    |  s,      _,      _,     []      -> invalid_argf "merge4 different lengths! l1: %s" (asc_sets_to_str s)
     | (s1, v1) :: t1
     , (s2, v2) :: t2
     , (s3, v3) :: t3
@@ -1332,10 +1221,10 @@ end = struct
   and loop4 eq f acc l1 l2 l3 l4 =
     match l1, l2, l3, l4 with
     | [],     [],     [],     []      -> acc     (* We insert at the end, thereby preserving order *)
-    | [],      s,      _,      _      -> invalid_argf "loop4 different lengths! l2: %s" (asc_sets_to_str s)
-    |  _,     [],      s,      _      -> invalid_argf "loop4 different lengths! l3: %s" (asc_sets_to_str s)
-    |  _,      _,     [],      s      -> invalid_argf "loop4 different lengths! l4: %s" (asc_sets_to_str s)
-    |  s,      _,      _,     []      -> invalid_argf "loop4 different lengths! l1: %s" (asc_sets_to_str s)
+    | [],      s,      _,      _      -> invalid_argf "merge4 different lengths! l2: %s" (asc_sets_to_str s)
+    |  _,     [],      s,      _      -> invalid_argf "merge4 different lengths! l3: %s" (asc_sets_to_str s)
+    |  _,      _,     [],      s      -> invalid_argf "merge4 different lengths! l4: %s" (asc_sets_to_str s)
+    |  s,      _,      _,     []      -> invalid_argf "merge4 different lengths! l1: %s" (asc_sets_to_str s)
     | (s1, v1) :: t1
     , (s2, v2) :: t2
     , (s3, v3) :: t3
@@ -1352,12 +1241,15 @@ end = struct
     an element at the end, each time, Hopefully, merging, due to {eq}, instead into
     the accumulator-list will effectively constrain the size of the resulting
     list such that the cost is amortized. *)
-  and merge4 ~eq t1 t2 t3 t4 f =
+  and merge4 t1 t2 t3 t4 ~eq ~f =
     match t1, t2, t3, t4 with
+    | E, E, E, E                  ->
+        E
     | E, _, _, _
     | _, E, _, _
     | _, _, E, _
-    | _, _, _, E                  -> invalid_argf "Can't merge empty4"
+    | _, _, _, E                  ->
+        invalid_argf "Trying to merge an empty with a non empty partition map."
 
     (* 0 S's, 4 U's *)
     | U {size = s1; value = v1; set}
@@ -1477,34 +1369,34 @@ end = struct
           S {size; values = start4 eq f l1 l2 l3 l4})
 
   let fold_values t ~f ~init = match t with
-    | E           -> invalid_arg "Can't fold_values on empty!"
+    | E           -> init
     | U {value}   -> f init value
     | S {values}  -> List.fold_left values ~init ~f:(fun acc (_l, v) -> f acc v)
 
   let fold_set_and_values t ~f ~init = match t with
-    | E               -> invalid_arg "Can't fold_set_and_values on empty!"
+    | E               -> init
     | U {set; value}  -> f init set value
     | S {values}      -> List.fold_left values ~init ~f:(fun acc (l, v) -> f acc l v)
 
   let fold_indices_and_values t ~f ~init = match t with
-    | E              -> invalid_arg "Can't fold_indices_and_values on empty!"
+    | E              -> init
     | U {set; value} -> Set.fold set ~init ~f:(fun acc i -> f acc i value)
     | S {values}     -> List.fold_left values ~init ~f:(fun init (s, v) ->
                           Set.fold s ~init ~f:(fun acc i -> f acc i v))
 
-  let map t eq ~f = match t with
-    | E                     -> invalid_argf "Can't map empty!"
+  let map t ~eq ~f = match t with
+    | E                     -> E
     | U {set; size; value}  -> U {set; size; value = f value}
     | S {size; values}      -> S {size; values = map_with_full_check eq values ~f}
 
-  let iter_set t ~f = match t with
-    | E               -> invalid_argf "Can't iter_set empty"
+  let iter_indices_and_values t ~f = match t with
+    | E               -> ()
     | U {set; value}  -> Set.iter set ~f:(fun i -> f i value)
     | S {values}      -> List.iter values ~f:(fun (l, v) ->
                            List.iter l ~f:(Interval.iter ~f:(fun i -> f i v)))
 
   let to_array = function
-    | E                               -> invalid_argf "Can't to_array empty"
+    | E                               -> [||]
     | U {size; value}                 -> Array.make size value
     | S {values = []}                 -> [||]
     | S {size; values = (s, v) :: t } ->
@@ -1514,7 +1406,7 @@ end = struct
           List.iter t ~f:(fun (s, v) -> fill s v);
           r
 
-  let cpair ~f eq = function
+  let cpair ~f ~eq = function
     | E                     -> E
     | U { size; set; value} ->
         let nset = Set.cpair size set in
@@ -1539,7 +1431,7 @@ end = struct
               let nacc =
                 if Set.is_empty cm1 then begin
                   if Set.is_empty cm2 then
-                    invalid_argf "Both cross pairs are are emtpy"
+                    invalid_argf "Both cross pairs are emtpy!"
                   else
                     let nv2 = f v fv in
                     merge_or_add_to_end eq cm2 nv2 acc

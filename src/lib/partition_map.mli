@@ -1,3 +1,13 @@
+(** Interval's represent consecutive regions of the positive integer domain.
+
+    This interface is purposefully undocumented as it is not meant to be used
+    without understanding the implementation. At the moment, we still need:
+      - [Ascending.fold_set_and_values]
+      - [Set.iter]
+      - [Set.size]
+    to be exposed to for efficient operations in Prohlatype and a proper
+    refactor is beyond the scope of current work.
+*)
 module Interval : sig
 
   type t
@@ -52,6 +62,11 @@ module Interval : sig
 
 end (* Interval *)
 
+(** Sets of [Interval]s.
+
+  This interface is purposefully undocumented as it is not meant to be used
+  without understanding the implementation.
+*)
 module Set : sig
 
   type t = Interval.t list
@@ -59,6 +74,7 @@ module Set : sig
   val to_string : t -> string
 
   val empty : t
+
   val is_empty : t -> bool
 
   (* Number of elements in the set. *)
@@ -69,108 +85,144 @@ module Set : sig
 
   val inside : int -> t -> bool
 
-  (* [all_intersections t1 t2] returns the intersection, remaining in t1 and
-     remaining t2. *)
-  val all_intersections : t -> t -> t * t * t
+  (* [intersection_and_differences t1 t2] returns the intersection, and the
+     differences; remaining in [t1] and remaining [t2], respectively. *)
+  val intersection_and_differences : t -> t -> t * t * t
 
   val iter : t -> f:(int -> unit) -> unit
 
-end (* Sig *)
+end (* Set *)
 
-(** A partition map is a data structure for a map over a partition of elements.
+(** A partition map is a data structure that tracks states using partitions
+    of the domain elements.
 
-  Specifically, if we know (and specifically can enumerate) the elements of
-  a set this data structure allows a mapping from elements to the values.
+  Specifically, if we know (and can enumerate) the elements of a set this data
+  structure allows a mapping from elements to the values.
+
   Internally, it maintains partitions: representations of sets of the elements
   that partitions the entire universe. The most important operation is the
-  {merge} of 2 (or more {merge4}) such partition maps.
+  {merge} of 2 (such as [merge4]) such partition maps.
 *)
 
-(* We construct partition map's in [Descending] order then convert them
-   into the {ascending} order for merging. *)
-module rec Descending : sig
+(** We frequently need to test the equality of values stored Partition Maps,
+    consequently many methods take such a predicate as an argument.
+
+    As of writing (2018-05-16) A Functorized approach compiled with
+    4.06.0+Flambda is still marginally slower than passing around this equality
+    predicate. *)
+type 'a equality = 'a -> 'a -> bool
+
+(** It is recommended that one construct partition map's in [Descending] order
+    and then convert them into the ascending order for merging
+    [Ascending.of_descending]. *)
+module Descending : sig
 
   type +'a t
 
   (* Empty constructors. *)
   val empty : 'a t
 
-  (* Initializers. These take a value and either assume an entry (the 'first' one
-    in the descending case) or all of them (pass the size of the partition, the
-    resulting [t] has indices [[0,size)] ) in the ascending case. *)
-  val init_first : 'a -> 'a t
+  (* Test whether a descending partition map is empty. *)
+  val is_empty : 'a t -> bool
 
+  (* Initializers. Create a partition map keyed off of just the first element
+     in the domain. *)
+  val singleton : 'a -> 'a t
+
+  (* Size of the domain. *)
+  val size : 'a t -> int
+
+  (* Convert to string. *)
   val to_string : 'a t -> ('a -> string) -> string
 
   (* Observe a value for the next element. *)
-  val add : 'a -> 'a t -> 'a t
+  val add : eq:'a equality -> 'a -> 'a t -> 'a t
 
-end (* Descending *) and Ascending : sig
+end (* Descending *)
+
+module Ascending : sig
 
   type +'a t
 
-  val of_descending : ('a -> 'a -> bool) -> 'a Descending.t -> 'a t
+  (** Empty constructor. *)
+  val empty : 'a t
 
-  (* Throw Invalid_argument if does not start with 0 or the intervals
-     are not ascending. *)
-  val of_ascending_interval_list : ('a -> 'a -> bool)
+  (** Test whether a ascending partition map is empty. *)
+  val is_empty : 'a t -> bool
+
+  (** Convert a descending partition map into an ascending. *)
+  val of_descending : eq:'a equality -> 'a Descending.t -> 'a t
+
+  (** [of_ascending_interval_list] converts ascending pairs of intervals
+     into an ascending partition map.
+     For example: [(0,100),'a'; (101,200), 'b'].
+
+     @raise {Invalid_argument} If the first value of the pair in the first
+      position is not 0 or the intervals are not ascending, or the values
+      between the end and successive start are not adjacent
+      (eg. next start = previous end + 1). *)
+  val of_ascending_interval_list : eq:'a equality
                                  -> ((int * int) * 'a) list
                                  -> 'a t
 
-  (* empty_a should only be used as a place holder (ex. initializing an array)
-  * and not for computation. TODO: refactor this. *)
-  val empty : 'a t
-
+  (** Initialize a partition map of the given size with one value. *)
   val init : size:int -> 'a -> 'a t
 
+  (** Convert to a string. *)
   val to_string : 'a t -> ('a -> string) -> string
 
-  val equal : ('a -> 'a -> bool)
-            -> 'a t
-            -> 'a t
-            -> bool
+  (** Test for equality. *)
+  val equal : eq:('a -> 'a -> bool) -> 'a t -> 'a t -> bool
 
-  (* [get t i] returns the value associated  with the [i]'th element.
+  (** [get t i] returns the value associated  with the [i]'th domain element.
 
-    @raise {Not_found} if [i] is outside the range [0, (size t)). *)
+      @raise {Not_found} if [i] is outside the range [0, (size t)). *)
   val get : 'a t -> int -> 'a
 
-  (** Set a value. *)
+  (** Set a value.
+
+      @raise {Invalid_argument} if [i] is outside the range [0, (size t)). *)
   val set : 'a t -> int -> 'a -> 'a t
 
-  (* Map the values, the internal storage doesn't change. *)
-  val map : 'a t
-          -> ('b -> 'b -> bool)
-          -> f:('a -> 'b)
-          -> 'b t
+  (** Map the values, the size of the domain does not change. *)
+  val map : 'a t -> eq:'b equality -> f:('a -> 'b) -> 'b t
 
-  (* Merge partition maps. Technically these are "map"'s but they are purposefully
-    named merge since they're only implemented for {ascending} partition maps. *)
-  val merge : eq:('c -> 'c -> bool)
-              -> 'a t
+  (** Merge partition maps.
+
+    One can think of this as a "map2", but please see the note for why I chose
+    to call them merges instead.
+
+    [Merge] takes a specific [equality] predicate because it compresses new
+    values generated by the mapping. When we compute a new value from the 2
+    intersecting elements, we will scan an accumulator and add it if it is
+    [not] equal to the other elements in the accumulator. Specifying, a good
+    predicate for such an operation is important as it is intended to constrain
+    the size of the final result.
+
+    @raise Invalid_argument if the partition maps do not represent domains of the
+    same size.
+  *)
+  val merge : 'a t
               -> 'b t
-              -> ('a -> 'b -> 'c)
+              -> eq:('c -> 'c -> bool)
+              -> f:('a -> 'b -> 'c)
               -> 'c t
 
-  val merge3 : eq:('d -> 'd -> bool)
-              -> 'a t
+  (** Merge 3 partition maps, see [merge]. *)
+  val merge3 : 'a t
               -> 'b t
               -> 'c t
-              -> ('a -> 'b -> 'c -> 'd)
+              -> eq:('d -> 'd -> bool)
+              -> f:('a -> 'b -> 'c -> 'd)
               -> 'd t
 
-  (** [merge4] takes a specific {eq}uality predicate because it compreses new
-      values generated by the mapping. When we compute a new value from the 4
-      intersecting elements, we will scan an accumulator and add it if it is
-      [not] equal to the other elements in the accumulator. Specifying, a good
-      predicate for such an operation is important as it is intended to constrain
-      the size of the final result. *)
-  val merge4 : eq:('e -> 'e -> bool)
-              -> 'a t
+  (** Merge 5 partition maps, see [merge]. *)
+  val merge4 : 'a t
               -> 'b t
               -> 'c t
               -> 'd t
-              -> ('a -> 'b -> 'c -> 'd -> 'e)
+              -> eq:('e -> 'e -> bool)
+              -> f:('a -> 'b -> 'c -> 'd -> 'e)
               -> 'e t
 
   (* Fold over the values. *)
@@ -192,26 +244,24 @@ end (* Descending *) and Ascending : sig
                               -> 'b
 
   (* Iterate over the entries and values. *)
-  val iter_set : 'a t -> f:(int -> 'a -> unit) -> unit
+  val iter_indices_and_values : 'a t -> f:(int -> 'a -> unit) -> unit
 
   (* Return the values, in ascending order, in an array. *)
   val to_array : 'a t -> 'a array
-
-  (** Diagnostic methods. These are not strictly necessary for the operations of
-      the Parametric PHMM but are exposed here for interactive use. *)
 
   (* The size of the partition. Specifically, if [size t = n] then [get t i] will
     succeed for [0, n).  *)
   val size : 'a t -> int
 
-  (* The number of unique elements in the underlying assoc . *)
+  (* The number of unique elements in the underlying association list. *)
   val length : 'a t -> int
 
-
+  (* Convert to Descending.t *)
   val descending : 'a t -> 'a Descending.t
 
+  (* Cross pair the maps. *)
   val cpair : f:('a -> 'a -> 'b)
-            -> ('b -> 'b -> bool)
+            -> eq:('b -> 'b -> bool)
             -> 'a t
             -> 'b t
 

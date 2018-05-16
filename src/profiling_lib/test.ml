@@ -359,14 +359,14 @@ module Benchmarks (C : Calculation) = struct
   module Pma = Partition_map.Ascending
 
   let states_as_pmas states =
-    Array.map states ~f:(Pma.of_ascending_interval_list C.equal)
+    Array.map states ~f:(Pma.of_ascending_interval_list ~eq:C.equal)
 
   let time_pmas_merge p pm_states =
     let size = p.domain_size in
     let starting_ascending_pm = Pma.init ~size C.zero in
     fun () ->
       `Pma (Array.fold_left pm_states ~init:starting_ascending_pm
-          ~f:(fun a p -> Pma.merge C.equal a p C.op))
+          ~f:(fun a p -> Pma.merge ~eq:C.equal a p ~f:C.op))
 
   let time_pmas_merge3 p pm_states =
     let size = p.domain_size in
@@ -376,7 +376,7 @@ module Benchmarks (C : Calculation) = struct
       for i = 0 to n - 2 do
         let p1 = pm_states.(i) in
         let p2 = pm_states.(i+1) in
-        acc := Pma.merge3 C.equal !acc p1 p2 C.op3
+        acc := Pma.merge3 ~eq:C.equal !acc p1 p2 ~f:C.op3
       done;
       `Pma !acc
 

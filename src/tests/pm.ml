@@ -349,8 +349,8 @@ module A = Ascending
 let ascending_char_pm =
   let ascending_char_gen =
     Gen.(list_size (int_range 1 100) char
-         |> map (List.fold_left ~init:D.empty ~f:(fun l c -> D.add c l))
-         |> map (A.of_descending (=)))
+         |> map (List.fold_left ~init:D.empty ~f:(fun l c -> D.add ~eq:(=) c l))
+         |> map (A.of_descending ~eq:(=)))
   in
   make ~print:(fun a -> A.to_string a (sprintf "%c"))
     ascending_char_gen
@@ -376,7 +376,7 @@ let () =
     ~name:"Cross pairs of Partition maps."
     ascending_char_pm
     (fun pm_a ->
-       let pm_c = A.cpair ~f:(fun ci cj -> (ci, cj)) (=) pm_a in
+       let pm_c = A.cpair ~f:(fun ci cj -> (ci, cj)) ~eq:(=) pm_a in
        correct_cross_pair pm_a pm_c)
 
 let () =

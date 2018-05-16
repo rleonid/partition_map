@@ -1,8 +1,7 @@
 (jbuild_version 1)
 
 (library (
-  (name Lib09)
-  (public_name partition_map.Lib09)
+  (name lib09)
   (synopsis "Deprecated version.")
   (preprocess (pps (ppx_deriving.std bisect_ppx -conditional)))
   (ocamlopt_flags -O3)

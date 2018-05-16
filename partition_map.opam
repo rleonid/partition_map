@@ -6,7 +6,7 @@ dev-repo: "git+https://github.com/rleonid/partition_map.git"
 bug-reports: "https://github.com/rleonid/partition_map/issues"
 license: "Apache2"
 
-available: [ ocaml-version >= "4.03" ]
+available: [ ocaml-version >= "4.06" ]
 
 build: [
   [ "jbuilder" "subst"] {pinned}
@@ -14,6 +14,6 @@ build: [
 ]
 
 depends: [
-#  "ocaml"               { >= "4.03" }
+#  "ocaml"               { >= "4.06" }
   "jbuilder"            { build & >="1.0+beta19" }
 ]

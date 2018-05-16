@@ -1,21 +1,26 @@
 \documentclass{article}
 
+\usepackage[margin=1.5in]{geometry}
 \usepackage{authblk}          % For 2+ authors
 \usepackage{mathtools}        % an improvement that incorporates amsmath.
 \usepackage{comment}
 \usepackage[ruled,noline]{algorithm2e}
 \usepackage{url}              % Used for linkable URLs.
+\usepackage{pgfplots}
+\usepackage{changepage}       % Used to adjust the margins for wide tables.
 
+\pgfplotsset{compat=1.16}
 % Empty Square Brackets are used to mean empty intervals.
 \newcommand{\esb}{[\,]}
 
 \begin{document}
 \title{Partition Maps}
 \author{Leonid Rozenberg\thanks{leonidr@gmail.com}}
+\date{}                             % Supress printing the date under the title.
 \maketitle
 
 \begin{abstract}
-  A partition map is a data structure to track functions where we
+  A partition map is a data structure to represent functions where we
   privilege merging,
   generating new functions,
   above other operations.
@@ -107,7 +112,7 @@ should highlight what is inefficient about the naive solution.
     that we want to create bounds proportional to $|R|$ as opposed to $|D|$.
 
   \item Traditionally,
-    when programmes are concerned with excessive or redundant evaluations,
+    when programmers are concerned with excessive or redundant evaluations,
     they will use memoization.
     In this case it is dubious that it will improve the situation as
     performing the calculation
@@ -125,8 +130,8 @@ should highlight what is inefficient about the naive solution.
   \item The domain is fixed.
     We know the full state for which we want to keep track of values and it
     does not change.
-    Many algorithms that we might consider assume, \emph{a priori} that the
-    user does not know the full domain,
+    Many algorithms that we might use instead assume,
+    \emph{a priori} that the user does not know the full domain,
     consequently concerning themselves with how it might grow or shrink.
 
 \end{enumerate}
@@ -201,7 +206,7 @@ But the domain space,
 packet size,
 could have a clustering effect
 where packets that have nearly the same size
-(ex 100 or 105 bytes),
+(eg. 100 or 105 bytes),
 have the same outcome.
 Or a large threshold effect,
 if a packet is larger than 1kb then it's metric is twice the value of
@@ -272,8 +277,7 @@ were similar in many instances and the functions were
 bounded by their numerical accuracy.
 The calculations were also simple,
 a cross product of probabilities ($M, I, D$) and weights ($t_{MM}, t_{IM}, t_{DM} \ldots$).
-Unfortunately,
-the application had to perform this calculation several million times
+The application had to perform this calculation several million times
 per sample.
 This was a big computational bottleneck
 and performing this computation via partition maps
@@ -282,22 +286,22 @@ reduced the running time to less than 5\% of the naive approach.
 
 \section{Related approaches}
 
-Before describing the implementation it would be helpful to survey the
+Before describing the implementation it would be helpful to quickly survey the
 literature of related data structures;
 to contrast how they do not meet the requirements and
 for inspiration.
 The common refrain is that they will make an undesired trade-off,
-where they favor lookups versus merging.
+where they favor look-ups versus merging.
 
 \subsection{Bidirectional maps}
 
 A bidirectional map\footnote{\url{https://en.wikipedia.org/wiki/Bidirectional_map}},
 can be thought of as set whose elements are pairs that represent the association,
-coupled with lookup and alteration methods so that the map is preserved regardless
-of which side is used as a key.
+coupled with lookup and alteration methods so that the set (maps) is (are) preserved
+regardless of which side is used as a key.
 For our purposes, naively, they would require storing an element of the domain.
 Non-naively, if one side was to represent a set of the implied partition,
-we are still willing to discard the convenience of lookups for fast merges.
+we are still willing to discard the convenience of look-ups for fast merges.
 
 \subsection{Fast Mergeable Integer Maps}
 
@@ -310,11 +314,11 @@ combining disparate sets of keys and values that preserve fast lookup.
 We intent to merge two cases where values for all the keys are already known.
 
 One could imagine mapping every set within a partition to a unique, large,
-integer by representing each it as a bit-vector (a bit per element), and then
+integer by representing it as a bit vector (a bit per element), and then
 utilizing Patricia tree's as described in this work.
 The large key sizes ($O(|D|)$ bits),
-pose a substantial problem as the bit-twiddling necessary for lookups is
-limited to the programs word size which might be a relatively small portion
+pose a substantial problem as the bit-twiddling necessary for look-ups is
+limited to a programs word size which might be a relatively small portion
 of $|D|$.
 Furthermore, the original fast lookup guarantees provided by the integers are
 now swamped by this bigger size.
@@ -324,18 +328,16 @@ knowledge of a fixed domain.
 One potential way to rescue this work would be an effective,
 possibly probabilistic,
 hash of sets in a partition to integers.
-But this is certainly an open question.
 
 \subsection{DIET}
 
 Discrete Interval Encoding Trees\cite{Erwig1993},
-describe an efficient representation for sets of types that easily transformed
-into integers.
+describe an efficient representation for sets of types that are easily
+transformed into integers.
 The use of intervals to represent sets is an affirmation of my approach.
-Unfortunately, it is far from straightforward to figure out how to adapt these
-sets to represent maps.
-Moreover, maps present a further challenge as they will break the adjacency of
-near by intervals.
+Sadly, it is far from straightforward to figure out how to adapt these
+sets to represent maps,
+they will break the adjacency of nearby intervals.
 Finally,
 while traversing the leaf nodes of a tree is not difficult,
 constructing trees in that order can lead to pathological cases.
@@ -346,44 +348,33 @@ case.
 \subsection{Mergeable Interval Map}
 
 The Mergeable Interval Map\cite{Bonichon2010} cleverly extends Okasaki's
-technique to ranges of integers, ala DIETs.
+technique to ranges of integers, in the style of DIETs.
 This work is probably closest in spirit to the
 data structure that I intent to describe but the focus on retrieval,
 even if optimized for arbitrary intervals,
 is not the trade-off that I seek.
 
-\section{Towards a non-naive implementation}
+\section{A non-naive implementation}
 
-A non-naive solution requires smaller overhead than one value per domain element.
+A non-naive solution seeks smaller costs than one value per domain element.
 Arrays are not amenable to such approaches
 because the association between domain and range is implicit;
 each position in the array is associated with an element from the domain
-based on some, usually obvious, enumeration.
+based on some enumeration.
 What is stored in each position is then the appropriate element in the range.
 
-\begin{comment}
-We could store only the range elements in an array,
-but that would just transfer the difficulty of the problem into
-figuring out how to index into such an array.
-
-\end{comment}
-
 An association list is a linked list where each node contains a key and a value.
-\begin{comment}
-For our purposes, they highlight how to separate two concerns necessary for
-our representation.
-\end{comment}
 They allow us $O(|R|)$ storage since we can store just one value per node.
-Then the problem turns into how to represent the keys,
+The problem then turns into how to represent and order the keys,
 the sets of a partition of $D$ implied by $f$.
 For the moment,
-let us put that problem aside and assume that we have such a representation
-$S_{i}$.
-For example, for $f_{1}$, $S_{1} = [10,80]$ and $S_{2} = [1,9]\cup[81,100]$.
-There is a simple algorithm to merge two association lists (\ref{Alm1}).
-Start by traversing both lists looking for intersections between the sets.
-If an intersection exists between the keys,
-we merge the two values and then insert that,
+let us assume that we have such a representation,
+$S_{i}$, and order.
+For $f_{1}$, $S_{1} = [10,80]$ and $S_{2} = [1,9]\cup[81,100]$.
+There is a simple algorithm (Alg.\ref{Alm1}) to merge two association lists.
+Traverse both lists looking for intersections between the sets.
+If an intersection between the keys exists,
+merge the two values and then insert that,
 keyed by the intersection,
 into an association list accumulator.
 
@@ -399,7 +390,7 @@ into an association list accumulator.
     % Unlike square brackets this looks fine without an extra space.
     $L \leftarrow \{\} $\;
     \ForEach{$S_{1},v_{1} \in L_{1}$}{
-      $R \leftarrow S_{1}$\;
+      $R \leftarrow S_{1}$\tcp*[r]{Remaining}
       \ForEach{$S_{2},v_{2} \in L2$ \textup{and} $R \neq \emptyset$}{
         \lnlset{inter}{inter}$I \leftarrow R \cap S_{2}$\;
         \lnlset{diff}{diff}$R \leftarrow R \backslash S_{2}$\;
@@ -439,19 +430,23 @@ This running time also excludes the set intersection and difference
 operations (labeled lines \ref{inter} and \ref{diff} in the algorithm),
 as if they were not expensive.
 
-Unfortunately, they are expensive.
+But they are expensive.
 One initially suitable approach to representing the $S_{i}$ would be
-to use a bit-vector.
+to use a bit vector.
 This is a common, well understood, data-structure,
 especially as the algorithms to compute set intersection and difference require
 simple bitwise logic operators.
-The problem is that this bitvector would require $|D|$ elements,
-and $O(|D|)$ bitwise logic operators!
+The problem is that this bit vector would still require $|D|$ bits,
+and $O(|D|)$ operations.
 
 The solution that I propose is to use pairs to represent the sequential,
 inclusive intervals that cover each $S_{i}$ stored in \emph{ascending} order.
+The intervals partition the set $[1,|D|]$,
+representing the domain,
+using the same representation as the one if storing $D$ in an array.
+
 For example\footnote{I am using square brackets ([]) to denote
-intervals (and pairs) and curly brackets (\{\}) to denonte lists.
+intervals (and pairs) and curly brackets (\{\}) to denote lists.
 This is counter to many common functional programming languages,
 but it reinforces the mathematical notation.
 Using parentheses for intervals would be confusing as I explicitly want to
@@ -463,6 +458,13 @@ and $S_{2} = \{[20,80] \}$
 This approaches main advantage is that it allows us to escape from $O(|D|)$
 as each $S_{i}$ is bounded by $|R|$.
 
+Using intervals has other advantages over bit vectors.
+Computing the intersection and difference requires a straight-forward
+but large case analysis of the ways that two intervals can
+intersect (Algorithm \ref{Alm2}),
+that needs simple integer comparison.
+Because our key elements are discrete we know our borders exactly.
+
 \begin{algorithm}[H]
   \DontPrintSemicolon
   \SetKwProg{Fn}{Function}{\string:}{}
@@ -473,9 +475,13 @@ as each $S_{i}$ is bounded by $|R|$.
       of non-negative integers that are non-empty,
       $s_{1} \leq e_{1}$ and
       $s_{2} \leq e_{2}$.}
-    \KwResult{A quintuple of optional\footnote{In the sense that the interval may be empty: $\esb$.}
+    \KwResult{A quintuple of potentially empty ($\esb$)
       intervals: the intersection,
-      the part of $I_{1}$ that come before the intersection,
+      the part of $I_{1}$ that come before the intersection\footnote{Even though
+      the intersection may be empty (such as the first case) $I_{1}$ or $I_{2}$
+      may still be before it in the sense that they are before the midpoint.
+      The same interpretation applies to the parts that come after an
+      intersection (such as the last case).},
       the part of $I_{2}$ that come before the intersection,
       the part of $I_{1}$ that come after the intersection,
       and the part of $I_{2}$ that come after the intersection.
@@ -527,13 +533,6 @@ as each $S_{i}$ is bounded by $|R|$.
 % Reconsider this page break if we can have a nicer position for the algorithm
 \pagebreak
 
-Using intervals has two further advantages over bit-vectors.
-First, computing the intersection and difference requires a straight-forward
-but large case analysis of the ways that two intervals can
-intersect (Algorithm \ref{Alm2}).
-These operations require just simple integer comparison,
-and because our key elements are discrete we know our borders exactly.
-
 The interval intersection-difference operation is then coupled with a fold
 over the two lists that contain the entire set.
 
@@ -546,7 +545,9 @@ over the two lists that contain the entire set.
   \Fn(){\Iad{$S_{1}, S_{2}$}}{
     \KwData{Two lists of \emph{ascending} intervals $S_{1}, S_{2}$.}
     \KwResult{A list of intersecting interval $S_{i}$, and two lists of the
-      set differences for each input lists, $S_{d1}, S_{d2}$.}
+      set differences for each input lists $S_{d1}
+      %(\forall x \in S_{1} \wedge \notin S_{2})
+      , S_{d2}$.}
     $S_{i} \leftarrow \{ \} $\;
     $S_{d1} \leftarrow \{ \} $\;
     $S_{d2} \leftarrow \{ \} $\;
@@ -568,7 +569,8 @@ over the two lists that contain the entire set.
 \end{algorithm}
 
 Unfortunately,
-there is no clear way to think about the running time of Algorithm \ref{Alm3}.
+I do not have way to think about the running time of Algorithm \ref{Alm3}
+that is satisfactory.
 On the one hand,
 we can think about about the running time in terms of the lengths of the
 interval lists.
@@ -583,8 +585,8 @@ in this case,
 the performance of the algorithm would depend upon the implied partitions.
 In other words, it would be highly domain dependent.
 
-In practice this algorithm is sufficient and has an advantage
-over using bit-vectors.
+In practice this algorithm may be sufficient and has an advantage
+over using bit vectors.
 Since the intervals are ascending,
 every call to
 \emph{IntervalIntersectionDifference}
@@ -604,6 +606,12 @@ by ascending,
 we mean that the lowest element, of the lowest interval,
 of each set
 are ascending.
+Therefore we would represent $f_{1}$ as
+$\{ \{[1,9],[81,100]\} \rightarrow 0,
+\{[10,80]\} \rightarrow 1 \}$
+and $g = \{\{[1,9], [91,100]\} \rightarrow 0,
+\{ [10,19], [81,90]\} \rightarrow 1,
+\{[20,80] \} \rightarrow 2 \}$.
 
 \begin{algorithm}[H]
   \SetKwProg{Fn}{Function}{\string:}{}
@@ -645,14 +653,16 @@ are ascending.
     Append $(I,v)$ to end of $L$.\;
   }
   \Fn(){\Insert{$S,v,L$}}{
-    \KwData{A set $S$, value $v$ and an association list $L$. We assume that $v$ does not equal any value in $L$.}
-    \KwResult{Modifies $L$, the lead pointer is unchanged.}
+    \KwData{A set $S$, value $v$ and an association list $L$. Assume that $v$ does not equal any value in $L$.}
+    \KwResult{Returns $L$.}
     \ForEach{$S_{i},v_{i} \in L$}{
-      \uIf{$S < S_{i}$}{
-        Insert $(S,v)$ before $(S_{i},v_{i})$\;
+      \uIf{$S < S_{i}$ \textup{and} $i=0$}{
+        Insert $(S,v)$ before $(S_{i},v_{i})$ and \Return{pointer to $(S,v)$}\;
+      } \uElseIf{$S < S_{i}$}{
+        Insert $(S,v)$ before $(S_{i},v_{i})$ and \Return{L}\;
       }
     }
-    Append $(I,v)$ to end of $L$.\;
+    Append $(I,v)$ to end of $L$ and \Return{L}.\;
   }
 
 \caption{Merging Two Association Lists.\label{Alm4}}
@@ -671,8 +681,7 @@ and process them in tandem instead.
 
 The ascending property of the sets guarantees that the call to
 \emph{IntersectionAndDifference} always returns a non-empty intersection.
-Unfortunately,
-in the pathological cases we can construct partitions so that
+In the pathological cases we can construct partitions so that
 neither $S_{d1}$ nor $S_{d2}$ are empty,
 consequently there are at most $mn$ calls to $f$.
 Furthermore,
@@ -690,10 +699,19 @@ It is easy to see that in this case,
 Algorithm \ref{Alm1},
 still checks for intersections $m^{2}$ times,
 while Algorithm \ref{Alm4} only $m$ times.
+Another important point to consider is the case of merging more than 2
+functions, (eg.$g = f_{1}+f_{2}+f_{3}$).
+In this case, the pathological case would still be $O(m^{2}n^{2}o^{2})$
+(where $o = L_{3}$),
+which can be much better than $O(|D|^{3})$.
+A final appeal of this approach is that it feels pretty natural,
+it is how I think most human ``computers'' would solve this problem.
 
-This example also highlights,
-how with this approach,
-as opposed to the first approach with bit-vectors,
+There are many aspects that affect Algorithm \ref{Alm4}'s running time besides
+the number of calls to $f$.
+For example
+with this approach,
+as opposed to the first approach with bit vectors,
 how we order the domain matters in terms of computational speed.
 It is important to avoid potentially pathological cases that might
 partition the domain, such as the even and odds example.
@@ -703,17 +721,394 @@ If we revisit the merging columns example,
 we want to know that successive rows will have the same values for
 multiple attributes.
 
-\section{Implementation and Details}
+Another practical aspect are the allocations necessary to support this
+algorithm.
+In the naive case we can explicitly define the space necessary by the size
+of $D$ and the number of merges that we may perform.
+In this case we are repeatedly allocating lists of pairs of integers to keep
+track of the partitions.
+
+At the moment, the only convincing way to think about Algorithm \ref{Alm4} as
+opposed to using arrays to store data is to benchmark.
+This is constructive as it demonstrates how many different trade-offs a
+developer has to take into account.
+
+
+\section{Implementation, Benchmarks and Details}
 
 A standalone library implementing partition maps in OCaml\cite{ocaml-manual}
 is available at \url{https://github.com/rleonid/partition_map}.
-As part of that
+The library also contains benchmarking applications to allow an interested
+programmer to see if partition maps are a good fit for a computation.
 
-\subsection{Interval representation}
+\subsection{Benchmarks}
+
+To analyze the performance of Algorithm \ref{Alm4} versus a naive solution
+using arrays,
+I created a hypothetical scenario where we merge functions
+similar to $f_{1}$ and $f_{2}$ that we defined previously.
+For the benchmarks we test domain sizes of 100, 500, 1000 and 5000.
+%In the naive case we allocate arrys of integers of those sizes and for
+%partition maps we construct partition maps for their representation.
+For the first two domain sizes we tested merging 100, 500, 1000 and 5000
+states/functions and for the last two domain sizes we also tested merging
+250, 750 and 2500 states.
+
+To constrain the size of the range for each state I choose the number of
+unique values $v$, from a Poisson distribution ($\lambda=1.5$
+)\footnote{
+Technically,
+I drew the number of values greater than or equal to 1 from a Poisson,
+since one could sample 0 from a Poisson distribution,
+which would not make sense.
+I chose the Poisson distribution because it provides a simple way to
+draw a small integer and this procedure in aggregate generates simple functions
+like $f_{1}$, $f_{2}$ and $g$.
+One can interpret this to mean that on average there will be $2.5$ values
+per domain.
+I could have used a more complicated form for function generation but I
+thought that would further obscure the benchmark.}.
+Afterwards, I again sample from a Poisson distribution ($\lambda=2.5$) to
+determine the number of intervals, $i$.
+Finally, I assign the values in $[1,v]$ to the $i$ intervals by randomly
+choosing a starting value in $[1,v]$
+sequentially (wrapping back to $1$ after $v$)
+assigning values.
+For example,
+for a domain size of 1000 some sample functions (represented as partition maps)
+are:
+$\{\{[1,496]\}\rightarrow0, \{[497,745]\} \rightarrow 1, \{[746,1000]\} \rightarrow 2\}$,
+$\{\{[1,886],[937,978]\}\rightarrow 1 \{[887,936],[979,1000]\} \rightarrow 0 \}$,
+and
+$\{\{[1,481],[538,987]\}\rightarrow 0, \{[482,537],[988,1000]\}\rightarrow 1\}$.
+The merging operation consists of adding the two states,
+for the above three we get:
+$\{ \{[1,481]\}\rightarrow1,
+    \{[482,496],[538,745],[887,936],[979,987]\}\rightarrow2,
+    \{[497,537],[746,886],[937,978],[988,1000]\}\rightarrow3 \}$.
+We do not time the allocation, calculation or deallocation of the
+intermediate states.
+Lastly,
+the times are normalized so that 100 merges of an array of size 100, takes time 1.
+
+
+\begin{figure}[!ht]
+  \caption{Comparing Arrays vs Partition Map, $E[|R|] = 2.5$.}
+\begin{adjustwidth}{-0.5in}{}
+\begin{center}
+\begin{tabular}{rl}
+\begin{tikzpicture}
+\begin{loglogaxis}[% xlabel=Merges
+                    ylabel=Time
+                  , title={Domain Size = 100}
+                  , width=7cm
+                  , height=7cm
+                  , ymin=0.5
+                  , ymax=1e5
+                  %, ytick={0,1,10,100,1000,10000}
+                  , xtick=data
+                  , xticklabels={100,500,1000, 5000}
+                  , xticklabel style={anchor=north}
+                  ]
+\addplot[color=red,mark=x] coordinates {
+  (100, 1.00)
+  (500, 5.00)
+  (1000, 9.96)
+  (5000, 51.84)
+};
+\addplot[color=blue,mark=x] coordinates {
+  (100, 4.51)
+  (500, 43.95)
+  (1000, 104.99)
+  (5000, 803.01)
+};
+%\legend{Array, P}
+\end{loglogaxis}
+\end{tikzpicture}
+&
+\begin{tikzpicture}
+\begin{loglogaxis}[% xlabel=Merges
+                  %, ylabel=Time
+                    title={Domain Size = 500}
+                  , width=7cm
+                  , height=7cm
+                  , ymin=0.5
+                  , ymax=1e5
+                  %, ytick={0,1,10,100,1000,10000}
+                  , xtick=data
+                  , xticklabels={100,500,1000, 5000}
+                  , xticklabel style={anchor=north}
+                  ]
+\addplot[color=red,mark=x] coordinates {
+  (100, 4.91)
+  (500, 24.48)
+  (1000, 49.83)
+  (5000, 252.94)
+};
+\addplot[color=blue,mark=x] coordinates {
+  (100, 6.13)
+  (500, 102.19)
+  (1000, 309.29)
+  (5000, 4157.19)
+};
+\end{loglogaxis}
+\end{tikzpicture}
+\\ %
+\begin{tikzpicture}
+\begin{loglogaxis}[% xlabel=Merges
+                    ylabel=Time
+                  , title={Domain Size = 1000}
+                  , width=7cm
+                  , height=7cm
+                  , ymin=0.5
+                  , ymax=1e5
+                  , xtick=data
+                  , xticklabels={100,,500,,1000,2500,5000}
+                  , xticklabel style={anchor=north}
+                  ]
+\addplot[color=red,mark=x] coordinates {
+  (100,	9.94)
+  (250,	24.43)
+  (500,	46.49)
+  (750,	70.56)
+  (1000, 93.67)
+  (2500, 233.43)
+  (5000, 464.53)
+};
+
+\addplot[color=blue,mark=x] coordinates {
+  (100, 9.46)
+  (250, 33.31)
+  (500, 115.74)
+  (750, 208.37)
+  (1000, 436.95)
+  (2500, 2362.05)
+  (5000, 6484.38)
+};
+\end{loglogaxis}
+\end{tikzpicture}
+&
+\begin{tikzpicture}
+\begin{loglogaxis}[% xlabel=Merges
+                  %, ylabel=Time
+                    title={Domain Size = 5000}
+                  , width=7cm
+                  , height=7cm
+                  , ymin=0.5
+                  , ymax=1e5
+                  , xtick=data
+                  , xticklabels={100,,500,,1000,2500,5000}
+                  , xticklabel style={anchor=north,font=\small}
+                  ]
+\addplot[color=red,mark=x] coordinates {
+  (100,	46.90)
+  (250,	115.44)
+  (500,	233.01)
+  (750,	347.75)
+  (1000,	460.53)
+  (2500,	1152.19)
+  (5000,	2303.18)
+};
+
+\addplot[color=blue,mark=x] coordinates {
+  (100, 5.29)
+  (250, 38.36)
+  (500, 129.29)
+  (750, 365.72)
+  (1000, 566.07)
+  (2500, 4009.40)
+  (5000, 16318.09)
+};
+\end{loglogaxis}
+\end{tikzpicture}
+
+\end{tabular}
+\end{center}
+\end{adjustwidth}
+\end{figure}
+
+The immediate take away is that in only a limited set of scenarios do
+partition maps outperform the naive approach.
+But there are a couple points to consider.
+First, the array sizes that we are comparing against are relatively small
+and in all cases the entire data set, including the domains to merge,
+can fit onto a CPU-cache.
+Therefore determining the two values to add is pretty fast and difficult for
+partition maps to compete against.
+
+Second,
+notice that for a given domain size,
+the time increases proportional to the number of merges, as expected.
+But the time also increases as the domain increase: the curve rises.
+Partition maps do not exhibit the same behavior,
+rather their curve tilts!
+Consequently, for a small number of merges partition maps will be faster
+than arrays.
+
+Regardless,
+the reader is probably disappointed;
+she was promised an interesting data-structure but in only a limited
+case does it actually prove to be useful.
+Fortunately, not everything is lost.
+Here is another benchmark where we lower the expected size of the range
+to 1.5.
+The take-away message is that the complexity of the computation matters;
+if it is simple, then partition maps can help.
+
+\begin{figure}[!ht]
+  \caption{Comparing Arrays vs Partition Map, $E[|R|] = 1.5$.}
+\begin{adjustwidth}{-0.5in}{}
+\begin{center}
+\begin{tabular}{rl}
+\begin{tikzpicture}
+\begin{loglogaxis}[% xlabel=Merges
+                    ylabel=Time
+                  , width=7cm
+                  , height=7cm
+                  , title={Domain Size = 100}
+                  , ymin=0.1
+                  , ymax=1e4
+                  %, ytick={0,1,10,100,1000,10000}
+                  , xtick=data
+                  , xticklabels={100,500,1000,5000}
+                  , xticklabel style={anchor=north}
+                  ]
+\addplot[color=red,mark=x] coordinates {
+  (100, 1.000000)
+  (500, 5.301532)
+  (1000, 10.727934)
+  (5000, 54.528427)
+};
+\addplot[color=blue,mark=x] coordinates {
+  (100, 0.384605)
+  (500, 7.720924)
+  (1000, 21.098390)
+  (5000, 202.140966)
+};
+%\legend{Array, P}
+\end{loglogaxis}
+\end{tikzpicture}
+&
+\begin{tikzpicture}
+\begin{loglogaxis}[% xlabel=Merges
+                  %, ylabel=Time
+                    width=7cm
+                  , height=7cm
+                  , title={Domain Size = 500}
+                  , ymin=0.1
+                  , ymax=1e4
+                  %, ytick={0,1,10,100,1000,10000}
+                  , xtick=data
+                  , xticklabels={100,500,1000, 5000}
+                  , xticklabel style={anchor=north}
+                  ]
+\addplot[color=red,mark=x] coordinates {
+  (100, 5.169652)
+  (500, 25.593588)
+  (1000, 52.150701)
+  (5000, 263.246755)
+};
+\addplot[color=blue,mark=x] coordinates {
+  (100, 0.476895)
+  (500, 12.223261)
+  (1000, 39.914200)
+  (5000, 555.920561)
+};
+\end{loglogaxis}
+\end{tikzpicture}
+\\ %
+\begin{tikzpicture}
+\begin{loglogaxis}[% xlabel=Merges
+                    ylabel=Time
+                  , width=7cm
+                  , height=7cm
+                  , title={Domain Size = 1000}
+                  , ymin=0.1
+                  , ymax=1e4
+                  , xtick=data
+                  , xticklabels={100,,500,,1000,,5000}
+                  , xticklabel style={anchor=north}
+                  ]
+\addplot[color=red,mark=x] coordinates {
+  (100, 13.491563)
+  (250, 26.161475)
+  (500, 51.429387)
+  (750, 78.238188)
+  (1000, 103.226765)
+  (2500, 254.535955)
+  (5000, 505.253505)
+};
+
+\addplot[color=blue,mark=x] coordinates {
+  (100, 0.385644)
+  (250, 2.876038)
+  (500, 14.275182)
+  (750, 23.910306)
+  (1000, 39.036604)
+  (2500, 256.074766)
+  (5000, 803.758567)
+};
+\end{loglogaxis}
+\end{tikzpicture}
+&
+\begin{tikzpicture}
+\begin{loglogaxis}[% xlabel=Merges
+                  %, ylabel=Time
+                    title={Domain Size = 5000}
+                  , width=7cm
+                  , height=7cm
+                  , ymin=0.1
+                  , ymax=1e4
+                  , xtick=data
+                  , xticklabels={100,,500,,1000,,5000}
+                  , xticklabel style={anchor=north,font=\small}
+                  ]
+\addplot[color=red,mark=x] coordinates {
+  (100, 49.960021)
+  (250, 124.778946)
+  (500, 249.161604)
+  (750, 372.529984)
+  (1000, 493.225208)
+  (2500, 1237.998442)
+  (5000, 2472.004413)
+};
+
+\addplot[color=blue,mark=x] coordinates {
+  (100, 0.667445)
+  (250, 2.420820)
+  (500, 11.919003)
+  (750, 29.504543)
+  (1000, 50.034917)
+  (2500, 347.868899)
+  (5000, 1419.972482)
+};
+\end{loglogaxis}
+\end{tikzpicture}
+
+\end{tabular}
+\end{center}
+\end{adjustwidth}
+\end{figure}
+
+
+Lastly, observe that there is a slight kink in the partition maps
+performance trend\footnote{The reason why I included 250 and 750 merges.}.
+I am not certain of the exact cause
+as I have not figured out an adequate model of this running time.
+I think that it represents something like a phase transition;
+at some point the relationship of
+length of the list storing the interval and values,
+versus the length of the intervals becomes more and then less
+favorable for the operation.
+I only highlight it because I have seen this odd behavior before and to
+emphasize that a better understanding of Algorithm \ref{Alm4} is needed.
+
+\subsection{Details}
+\subsubsection{Interval representation}
 
 Given that the domain is limited.
 It is probable that for reasonable problems,
-it is much smaller than the set of representable integers ($2^{32}$ or $2^64$).
+it is much smaller than the set of representable integers ($2^{32}$ or $2^{64}$).
 Furthermore,
 one of the big practical burdens of this algorithm is the storage of the intervals
 as pairs.
@@ -728,20 +1123,20 @@ this also makes comparing intervals much faster
 and a better version of Algorithm \ref{Alm2} can be implemented that
 takes only one comparison to see if two intervals are equal.
 
-\section{Conclusion and Open questions}
+\section{Conclusion and open questions}
 
-This is still very much a work in progress,
-and I am not certain that the current method and implementation is the best one.
+This is still a work in progress,
+and I am do not think that the current method and implementation is the best
+one possible.
 A big motivation for publishing and exposing this work is to gather feedback.
 I have tried my best to find connections to other approaches,
-and perhaps this technique is well understood and studied under a different name,
-but I have been largely unsuccessful.
+and perhaps this technique is well understood and studied under a different name.
 I have also not been successful in providing proofs of various claims,
 nor even improve their somewhat unsatisfactory worst case
-performance\footnote{$O(m^{2}n^{2})$ can easily be worse than $O(|D|)$ especially because
-of modern hardware configurations.}.
+performance.%\footnote{$O(m^{2}n^{2})$ can easily be worse than $O(|D|)$ especially because
+%of modern hardware configurations.}.
 
-None-the-less, I have found this technique useful and wanted to reach out to
+None-the-less, I have found this technique useful and wanted to reach out to a
 broader community.
 I will close by describing what I see to be the interesting problems remaining.
 I have divided the problems into a practical and theoretical categories.
@@ -752,22 +1147,21 @@ I have divided the problems into a practical and theoretical categories.
 The methods describe here use nested lists to represent the final association,
 and the implementation is in OCaml,
 a functional garbage-collected language.
-The cost of managing the pointers for our data-structure is handled by the
-garbage-collector\footnote{
+The cost of managing the pointers for our data-structure,
+is handled by the garbage-collector\footnote{
   In my use case the program spends around 25\% of the running time in the GC.},
 and perhaps a hand-tuned solution might do better.
-But such a hand-tuned solution would rely upon carefully managing space for
+But such a solution would rely upon carefully managing space for
 the sets of the partition and values (or pointers to them).
 This leads to an important question of whether the entire arrangement may be
 encoded in an implicit form.
+This approach could alleviate the current implementations cache-unfriendliness.
 
 In our custom implementation of intervals, we encoded the start and end
 within a single integer because the size of the domain was much smaller
 than what is ultimately representable by even half a 32bit word.
 But this leaves open the question of whether we can encode even more state
-into a given uniform bit-vector,
-such that our entire data structure is arranged implicitly,
-like a binary heap.
+into a given word.
 
 \subsubsection{SIMD}
 
@@ -814,17 +1208,20 @@ For most purposes,
 we can expect that $|R|<2^{64}$,
 so a 64-bit word size would be sufficient.
 But we want two properties for this function.
-First, efficient computation, we do not have the resources for a cryptographic
-secure hash.
+First, efficient computation,
+we do not have the resources for a cryptographic secure hash,
+as we would be competing against integer comparisons.
 And second,
-some ability to preserve intersections and set-difference operations.
-This last request, seems particularly daunting,
+an ability to preserve intersections and set-difference operations.
+This last request,
+seems particularly daunting,
 so perhaps this approach is dubious.
 
 \section{Acknowledgments}
 
 This research was initiated and performed while the author was employed by
-Mount Sinai and supported by the Parker Institute for Cancer Immunotherapy.
+Mount Sinai and previously supported by the Parker Institute for Cancer
+Immunotherapy.
 The author is indebted to helpful discussions with Sebastian Mondet.
 
 \clearpage

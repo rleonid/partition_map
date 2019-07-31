@@ -3,31 +3,31 @@
 default: build
 
 build:
-	jbuilder build
+	dune build
 
 setup:
 	opam install --deps-only ./pm.opam
 
 clean:
-	jbuilder clean
+	dune clean
 
 bench:
-	jbuilder build src/profiling/bench.exe
+	dune build src/profiling/bench.exe
 
 compare:
-	jbuilder build src/profiling/compare.exe
+	dune build src/profiling/compare.exe
 
 exec_bench:
-	jbuilder exec src/profiling/bench.exe
+	dune exec src/profiling/bench.exe
 
 exec_compare:
-	jbuilder exec src/profiling/compare.exe
+	dune exec src/profiling/compare.exe
 
 test:
-	jbuilder runtest
+	dune runtest
 
 covered_test:
-	BISECT_ENABLE=YES jbuilder runtest
+	BISECT_ENABLE=YES dune runtest
 
 report:
 	cd _build/default && bisect-ppx-report -html ../../ src/tests/*.out

@@ -9,12 +9,12 @@ license: "Apache2"
 available: [ ocaml-version >= "4.06" ]
 
 build: [
-  [ "jbuilder" "subst"] {pinned}
-  [ "jbuilder" "build" "-p" name "-j" jobs "@install"]
+  [ "dune" "subst"] {pinned}
+  [ "dune" "build" "-p" name "-j" jobs]
 ]
 
 depends: [
 #  "ocaml"               { >= "4.06" }
-  "jbuilder"            { build & >="1.0+beta19" }
+  "dune"            {build & >= "1.0" }
   "bisect_ppx"          { build }
 ]
